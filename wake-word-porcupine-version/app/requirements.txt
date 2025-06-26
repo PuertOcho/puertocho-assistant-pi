@@ -1,0 +1,7 @@
+RPi.GPIO
+pvporcupine
+webrtcvad
+sounddevice
+requests
+numpy
+python-dotenv
