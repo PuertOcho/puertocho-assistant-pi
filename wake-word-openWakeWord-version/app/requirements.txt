@@ -1,0 +1,7 @@
+openwakeword
+sounddevice
+numpy
+python-dotenv
+requests
+RPi.GPIO
+webrtcvad
