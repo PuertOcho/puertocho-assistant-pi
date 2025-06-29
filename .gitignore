@@ -1,0 +1,25 @@
+# Archivos de debug de audio
+debug_audio/
+*.wav
+*.mp3
+*.flac
+
+# Archivos temporales
+*.tmp
+*.temp
+
+# Logs
+*.log
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.env
+
+# Docker
+.dockerignore 

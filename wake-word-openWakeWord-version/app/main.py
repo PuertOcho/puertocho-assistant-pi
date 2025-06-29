@@ -184,11 +184,34 @@ class VoiceAssistant:
 
     def _setup_openwakeword(self):
         """Configurar openWakeWord con modelos específicos"""
+        
+        # TEMPORAL: Saltamos openWakeWord completamente por ahora
+        print("🔧 Modo de prueba: saltando openWakeWord - funcionará solo con botón GPIO")
+        self.oww_model = None
+        self.active_models = []
+        return
+        
+        # Verificar si debemos intentar usar modelos de audio
+        mode = os.getenv('MODE', '').upper()
+        if mode == 'GPIO_ONLY':
+            print("🔧 Modo GPIO_ONLY activado - saltando inicialización de openWakeWord")
+            self.oww_model = None
+            self.active_models = []
+            return
+        
         try:
             import openwakeword
             from openwakeword.model import Model
             
             print("🔄 Inicializando openWakeWord...")
+            
+            # Verificar si los modelos están especificados y no vacíos
+            model_paths = os.getenv('OPENWAKEWORD_MODEL_PATHS', 'alexa,hey_mycroft').strip()
+            if not model_paths:
+                print("🔧 OPENWAKEWORD_MODEL_PATHS vacío - funcionará solo con botón GPIO")
+                self.oww_model = None
+                self.active_models = []
+                return
             
             # Descargar modelos preentrenados si es necesario
             try:
@@ -197,6 +220,10 @@ class VoiceAssistant:
                 print("✅ Modelos descargados correctamente")
             except Exception as e:
                 print(f"⚠️ Error descargando modelos: {e}")
+                print("🔄 Continuando sin modelos de audio - solo botón GPIO")
+                self.oww_model = None
+                self.active_models = []
+                return
             
             # Configurar parámetros del modelo
             model_kwargs = {
@@ -213,30 +240,45 @@ class VoiceAssistant:
                 print("✅ Supresión de ruido Speex habilitada")
             
             # Inicializar modelo con modelos específicos o todos
-            if OPENWAKEWORD_MODEL_PATHS and OPENWAKEWORD_MODEL_PATHS != ['']:
-                # Filtrar modelos vacíos
-                models = [m.strip() for m in OPENWAKEWORD_MODEL_PATHS if m.strip()]
-                if models:
-                    model_kwargs['wakeword_models'] = models
-                    print(f"✅ Usando modelos específicos: {models}")
+            try:
+                if OPENWAKEWORD_MODEL_PATHS and OPENWAKEWORD_MODEL_PATHS != ['']:
+                    # Filtrar modelos vacíos
+                    models = [m.strip() for m in OPENWAKEWORD_MODEL_PATHS if m.strip()]
+                    if models:
+                        model_kwargs['wakeword_models'] = models
+                        print(f"🔄 Intentando cargar modelos específicos: {models}")
+                    else:
+                        print("✅ Usando todos los modelos preentrenados")
                 else:
                     print("✅ Usando todos los modelos preentrenados")
-            else:
-                print("✅ Usando todos los modelos preentrenados")
-            
-            # Crear modelo
-            self.oww_model = Model(**model_kwargs)
-            
-            # Obtener lista de modelos activos
-            self.active_models = list(self.oww_model.prediction_buffer.keys())
-            print(f"✅ openWakeWord inicializado con {len(self.active_models)} modelos")
-            print(f"🎯 Modelos activos: {', '.join(self.active_models)}")
-            print(f"🎚️ Umbral de activación: {OPENWAKEWORD_THRESHOLD}")
-            
+                
+                # Crear modelo
+                self.oww_model = Model(**model_kwargs)
+                
+                # Obtener lista de modelos activos
+                self.active_models = list(self.oww_model.prediction_buffer.keys())
+                print(f"✅ openWakeWord inicializado con {len(self.active_models)} modelos")
+                if self.active_models:
+                    print(f"🎯 Modelos activos: {', '.join(self.active_models)}")
+                else:
+                    print("⚠️ No se cargaron modelos - funcionará solo con botón GPIO")
+                print(f"🎚️ Umbral de activación: {OPENWAKEWORD_THRESHOLD}")
+                
+            except Exception as model_error:
+                print(f"⚠️ Error cargando modelos: {model_error}")
+                print("🔄 Continuando sin modelos de audio - solo botón GPIO")
+                self.oww_model = None
+                self.active_models = []
+                
         except ImportError:
-            raise ImportError("❌ openWakeWord no está instalado. Ejecuta: pip install openwakeword")
+            print("⚠️ openWakeWord no está disponible - funcionará solo con botón GPIO")
+            self.oww_model = None
+            self.active_models = []
         except Exception as e:
-            raise RuntimeError(f"❌ Error inicializando openWakeWord: {e}")
+            print(f"⚠️ Error general con openWakeWord: {e}")
+            print("🔄 Continuando sin modelos de audio - solo botón GPIO")
+            self.oww_model = None
+            self.active_models = []
 
     def _verify_transcription_service(self):
         """Verificar que el servicio de transcripción esté disponible"""
@@ -266,14 +308,26 @@ class VoiceAssistant:
         """Mostrar configuración actual"""
         print("\n📋 CONFIGURACIÓN ACTUAL:")
         print(f"🎤 Audio: {AUDIO_SAMPLE_RATE}Hz, {AUDIO_CHANNELS} canal, chunks de {AUDIO_CHUNK_SIZE} samples")
-        print(f"🧠 Modelos activos: {', '.join(self.active_models)}")
-        print(f"🎚️ Umbral: {OPENWAKEWORD_THRESHOLD}")
-        print(f"🔊 VAD: {'Habilitado' if OPENWAKEWORD_VAD_THRESHOLD > 0 else 'Deshabilitado'}")
-        print(f"🔇 Speex NS: {'Habilitado' if OPENWAKEWORD_ENABLE_SPEEX_NS else 'Deshabilitado'}")
+        
+        if self.active_models:
+            print(f"🧠 Modelos activos: {', '.join(self.active_models)}")
+            print(f"🎚️ Umbral: {OPENWAKEWORD_THRESHOLD}")
+            print(f"🔊 VAD: {'Habilitado' if OPENWAKEWORD_VAD_THRESHOLD > 0 else 'Deshabilitado'}")
+            print(f"🔇 Speex NS: {'Habilitado' if OPENWAKEWORD_ENABLE_SPEEX_NS else 'Deshabilitado'}")
+        else:
+            print("🧠 Modelos de audio: No disponibles")
+            print("🔘 Modo de funcionamiento: Solo botón GPIO")
+            
         print(f"🔴 LED Rojo (GPIO {LED_RECORD}): Escuchando")
         print(f"🟢 LED Verde (GPIO {LED_IDLE}): Listo")
         print(f"🔘 Botón (GPIO {BUTTON_PIN}): Activación manual")
         print(f"🤖 Transcripción: {TRANSCRIPTION_SERVICE_URL}")
+        
+        if not self.active_models:
+            print("\n💡 INSTRUCCIONES:")
+            print("   • Presiona el botón GPIO 22 para activar el asistente")
+            print("   • El LED verde indica que está listo")
+            print("   • El LED rojo indica que está escuchando comandos")
 
     def _set_state(self, new_state: str):
         """Cambiar estado del asistente y LEDs"""
@@ -328,37 +382,50 @@ class VoiceAssistant:
         """Procesar audio para detectar wake words"""
         while not self.should_stop:
             try:
-                # Obtener chunk de audio
-                audio_chunk = self.audio_buffer.get(timeout=0.1)
-                
-                # Convertir a formato requerido (mono, int16)
-                if audio_chunk.ndim > 1:
-                    audio_chunk = audio_chunk[:, 0]  # Tomar solo el primer canal
-                
-                # Convertir a int16 si es necesario
-                if audio_chunk.dtype != np.int16:
-                    audio_chunk = (audio_chunk * 32767).astype(np.int16)
-                
-                # Ejecutar predicción con openWakeWord
-                prediction = self.oww_model.predict(audio_chunk)
-                
-                # Verificar si algún modelo supera el umbral
-                for model_name, score in prediction.items():
-                    if score > OPENWAKEWORD_THRESHOLD:
-                        print(f"🎯 Wake word detectada: '{model_name}' (score: {score:.3f})")
-                        self._handle_wakeword_detected(model_name, score)
-                        break
-                
-                # Verificar activación manual del botón
+                # Verificar activación manual del botón siempre
                 if self.button_pressed:
                     print("🔘 Activación manual detectada")
                     self.button_pressed = False
                     self._handle_wakeword_detected("manual_button", 1.0)
+                    continue
+                
+                # Si no hay modelos de audio, solo manejar botón
+                if not self.oww_model or not self.active_models:
+                    time.sleep(0.1)
+                    continue
+                
+                # Obtener chunk de audio si hay modelos disponibles
+                try:
+                    audio_chunk = self.audio_buffer.get(timeout=0.1)
                     
-            except queue.Empty:
-                continue
+                    # Convertir a formato requerido (mono, int16)
+                    if audio_chunk.ndim > 1:
+                        audio_chunk = audio_chunk[:, 0]  # Tomar solo el primer canal
+                    
+                    # Convertir a int16 si es necesario
+                    if audio_chunk.dtype != np.int16:
+                        audio_chunk = (audio_chunk * 32767).astype(np.int16)
+                    
+                    # Ejecutar predicción con openWakeWord
+                    prediction = self.oww_model.predict(audio_chunk)
+                    
+                    # Verificar si algún modelo supera el umbral
+                    for model_name, score in prediction.items():
+                        if score > OPENWAKEWORD_THRESHOLD:
+                            print(f"🎯 Wake word detectada: '{model_name}' (score: {score:.3f})")
+                            self._handle_wakeword_detected(model_name, score)
+                            break
+                            
+                except queue.Empty:
+                    continue
+                except Exception as audio_error:
+                    # Si hay error con audio, continuar solo con botón
+                    print(f"⚠️ Error procesando audio (continuando con botón): {audio_error}")
+                    time.sleep(0.1)
+                    continue
+                    
             except Exception as e:
-                print(f"⚠️ Error procesando audio: {e}")
+                print(f"⚠️ Error general en procesamiento: {e}")
                 time.sleep(0.1)
 
     def _handle_wakeword_detected(self, model_name: str, score: float):
@@ -499,23 +566,100 @@ class VoiceAssistant:
             print("\n🚀 Iniciando asistente de voz...")
             self._set_state(AssistantState.IDLE)
             
-            # Iniciar hilo de procesamiento de audio
+            # Iniciar hilo de procesamiento de audio/botón
             audio_thread = threading.Thread(target=self._process_audio_for_wakeword, daemon=True)
             audio_thread.start()
             
-            # Iniciar captura de audio
-            with sd.InputStream(
-                channels=AUDIO_CHANNELS,
-                samplerate=AUDIO_SAMPLE_RATE,
-                dtype='float32',
-                blocksize=AUDIO_CHUNK_SIZE,
-                callback=self._audio_callback
-            ):
-                print("🎧 Captura de audio iniciada")
-                print("👂 Escuchando wake words...")
+            # Verificar si tenemos modelos de audio
+            if self.active_models:
+                print("🎧 Verificando dispositivos de audio...")
+                try:
+                    devices = sd.query_devices()
+                    print(f"📋 Dispositivos de audio encontrados: {len(devices)}")
+                    
+                    # Buscar dispositivo de entrada por defecto
+                    default_input = sd.default.device[0] if sd.default.device[0] is not None else 0
+                    print(f"🎤 Dispositivo de entrada por defecto: {default_input}")
+                    
+                    # Verificar si el dispositivo soporta la configuración deseada
+                    try:
+                        sd.check_input_settings(
+                            device=default_input,
+                            channels=AUDIO_CHANNELS,
+                            samplerate=AUDIO_SAMPLE_RATE,
+                            dtype='float32'
+                        )
+                        print(f"✅ Configuración de audio verificada: {AUDIO_SAMPLE_RATE}Hz, {AUDIO_CHANNELS} canal")
+                    except Exception as e:
+                        print(f"⚠️ Configuración no soportada: {e}")
+                        print("🔄 Probando configuraciones alternativas...")
+                        
+                        # Intentar con diferentes frecuencias de muestreo
+                        sample_rates = [16000, 44100, 48000, 22050, 8000]
+                        working_rate = None
+                        
+                        for rate in sample_rates:
+                            try:
+                                sd.check_input_settings(
+                                    device=default_input,
+                                    channels=AUDIO_CHANNELS,
+                                    samplerate=rate,
+                                    dtype='float32'
+                                )
+                                working_rate = rate
+                                print(f"✅ Configuración alternativa encontrada: {rate}Hz")
+                                break
+                            except:
+                                continue
+                        
+                        if working_rate:
+                            global AUDIO_SAMPLE_RATE
+                            AUDIO_SAMPLE_RATE = working_rate
+                            print(f"🔧 Usando frecuencia de muestreo: {AUDIO_SAMPLE_RATE}Hz")
+                        else:
+                            print("❌ No se encontró configuración de audio compatible")
+                            print("🔄 Funcionando solo con botón GPIO")
+                            raise RuntimeError("No hay configuración de audio compatible")
+                            
+                except Exception as e:
+                    print(f"⚠️ Error verificando audio: {e}")
+                    print("🔄 Funcionando solo con botón GPIO")
+                
+                # Iniciar captura de audio con configuración verificada
+                try:
+                    with sd.InputStream(
+                        channels=AUDIO_CHANNELS,
+                        samplerate=AUDIO_SAMPLE_RATE,
+                        dtype='float32',
+                        blocksize=AUDIO_CHUNK_SIZE,
+                        callback=self._audio_callback,
+                        device=default_input
+                    ):
+                        print("🎧 Captura de audio iniciada")
+                        print("👂 Escuchando wake words y botón GPIO...")
+                        print("💡 Presiona Ctrl+C para detener")
+                        
+                        # Loop principal con audio
+                        while not self.should_stop:
+                            time.sleep(0.1)
+                            
+                except Exception as audio_error:
+                    print(f"❌ Error específico de audio: {audio_error}")
+                    print("🔧 Funcionando solo con botón GPIO...")
+                    
+                    # Modo sin audio: solo botón GPIO
+                    print("🔘 Funcionando solo con botón GPIO (sin audio)")
+                    print("💡 Presiona el botón GPIO 22 para activar el asistente")
+                    print("💡 Presiona Ctrl+C para detener")
+                    
+                    while not self.should_stop:
+                        time.sleep(0.1)
+            else:
+                # Modo sin modelos de audio: solo botón GPIO
+                print("🔘 Funcionando solo con botón GPIO (sin modelos de audio)")
+                print("💡 Presiona el botón GPIO 22 para activar el asistente")
                 print("💡 Presiona Ctrl+C para detener")
                 
-                # Loop principal
                 while not self.should_stop:
                     time.sleep(0.1)
                     
