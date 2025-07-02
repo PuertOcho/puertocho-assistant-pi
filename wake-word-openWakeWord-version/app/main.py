@@ -96,7 +96,7 @@ LED_IDLE = int(os.getenv('LED_IDLE_PIN', 17))
 LED_RECORD = int(os.getenv('LED_RECORD_PIN', 27))
 
 # Configuración openWakeWord (se cargarán dinámicamente)
-OPENWAKEWORD_THRESHOLD = float(os.getenv('OPENWAKEWORD_THRESHOLD', 0.4))
+OPENWAKEWORD_THRESHOLD = float(os.getenv('OPENWAKEWORD_THRESHOLD', 0.6))
 OPENWAKEWORD_VAD_THRESHOLD = float(os.getenv('OPENWAKEWORD_VAD_THRESHOLD', 0.0))
 OPENWAKEWORD_ENABLE_SPEEX_NS = os.getenv('OPENWAKEWORD_ENABLE_SPEEX_NS', 'false').lower() == 'true'
 OPENWAKEWORD_INFERENCE_FRAMEWORK = os.getenv('OPENWAKEWORD_INFERENCE_FRAMEWORK', 'onnx')
@@ -529,8 +529,8 @@ class VoiceAssistant:
                         if not hasattr(self, '_last_detection_time'):
                             self._last_detection_time = 0
                         
-                        # Cooldown de 5 segundos entre detecciones (aumentado)
-                        if current_time - self._last_detection_time > 5:
+                        # Cooldown de 8 segundos entre detecciones (mejorado para evitar detecciones múltiples)
+                        if current_time - self._last_detection_time > 8:
                             for model_name, score in prediction.items():
                                 if score > OPENWAKEWORD_THRESHOLD:
                                     print(f"🎯 Wake word detectada: '{model_name}' (score: {score:.3f})")

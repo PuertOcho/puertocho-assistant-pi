@@ -24,7 +24,9 @@ wake-word-openWakeWord-version/
 │   ├── test_simple.py       # Tests unitarios
 │   └── test_voice_assistant.py  # Tests avanzados
 ├── scripts/
-│   └── verify_system.py     # Script de verificación del sistema
+│   ├── verify_system.py     # Script de verificación del sistema
+│   ├── monitor_performance.py # Monitor de rendimiento en tiempo real
+│   └── auto_optimizer.py    # Auto-optimizador de parámetros
 ├── docs/                    # Documentación adicional
 ├── docker-compose.yml       # Configuración Docker Compose
 ├── Dockerfile              # Imagen Docker
@@ -171,6 +173,29 @@ Este script verifica:
 - ✅ Servicio de transcripción
 - ✅ Tests funcionales
 
+### Monitoreo de Rendimiento
+
+```bash
+# Monitorear rendimiento en tiempo real
+python scripts/monitor_performance.py
+
+# Analizar log de rendimiento existente
+python scripts/monitor_performance.py analyze performance.log
+```
+
+### Auto-Optimización
+
+```bash
+# Optimizar parámetros automáticamente según rendimiento
+python scripts/auto_optimizer.py
+
+# Ver cambios propuestos sin aplicar
+python scripts/auto_optimizer.py --dry-run
+
+# Revertir a configuración por defecto
+python scripts/auto_optimizer.py --revert
+```
+
 ## 🔧 Solución de Problemas
 
 ### Audio No Funciona
@@ -276,9 +301,10 @@ docker compose exec puertocho-assistant bash
 - Tests y validación
 
 ### 🔄 En Desarrollo (Fase 4)
-- Optimización de rendimiento
-- Métricas de latencia y CPU
-- Configuración avanzada de parámetros
+- ✅ Threshold optimizado (0.6) para evitar detecciones múltiples
+- ✅ Monitor de rendimiento en tiempo real
+- ✅ Auto-optimizador de parámetros según condiciones
+- ⏳ Métricas de latencia y análisis avanzado
 
 ### 🔮 Futuro (Fases 5-7)
 - Modelo personalizado "Puertocho"

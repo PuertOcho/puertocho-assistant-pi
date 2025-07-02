@@ -21,15 +21,19 @@
 - [x] Implementar gestión de estados (IDLE, LISTENING, PROCESSING)
 - [x] Añadir tests de integración para la activación y flujo de comandos
 
-## Fase 4: Optimización y robustez
-- [ ] **Configuración de parámetros avanzados:**
-  - [ ] Ajustar umbral de activación (threshold) según entorno
-  - [ ] Configurar VAD (Voice Activity Detection) con `vad_threshold`
-  - [ ] Implementar supresión de ruido Speex (`enable_speex_noise_suppression=True`)
+## Fase 4: Optimización y robustez 🔄 EN PROGRESO
+- [x] **Configuración de parámetros avanzados:**
+  - [x] Ajustar umbral de activación (threshold) según entorno - Subido a 0.6 para evitar detecciones múltiples
+  - [x] Configurar VAD (Voice Activity Detection) con `vad_threshold` - Implementado y configurable
+  - [x] Implementar supresión de ruido Speex (`enable_speex_noise_suppression=True`) - Disponible por variable de entorno
 - [ ] **Optimización de rendimiento:**
   - [ ] Medir latencia y consumo de CPU/RAM en Raspberry Pi
   - [ ] Optimizar tamaño de frames (multiples de 80ms para eficiencia)
   - [ ] Configurar inference framework (ONNX vs TFLite según hardware)
+- [ ] **Mejoras de robustez:**
+  - [ ] Implementar métricas de rendimiento en tiempo real
+  - [ ] Añadir monitoreo de temperatura y throttling
+  - [ ] Sistema de auto-ajuste de parámetros según condiciones
 - [ ] Permitir selección/cambio de modelo de wake word (personalización)
 - [ ] Implementar fallback a modelos preentrenados si falla el personalizado
 
