@@ -39,6 +39,42 @@ def print_flush(*args, **kwargs):
 # Reemplazar print estándar
 print = print_flush
 
+def detect_supported_sample_rate():
+    """Detectar automáticamente la frecuencia de muestreo soportada por el sistema (como Porcupine)"""
+    print("🔍 Detectando frecuencia de audio compatible...")
+    
+    # Probar diferentes frecuencias en orden de preferencia
+    sample_rates = [16000, 44100, 48000, 22050, 8000]
+    
+    for rate in sample_rates:
+        try:
+            print(f"   Probando {rate} Hz...")
+            
+            # Crear stream de prueba muy breve (igual que Porcupine)
+            test_stream = sd.RawInputStream(
+                samplerate=rate,
+                blocksize=512,
+                dtype='int16',
+                channels=1
+            )
+            
+            with test_stream:
+                # Si llega aquí, la configuración funciona
+                print(f"✅ Frecuencia compatible encontrada: {rate} Hz")
+                return rate
+                
+        except Exception as e:
+            print(f"   ❌ {rate} Hz no compatible: {e}")
+            continue
+    
+    # Si nada funciona, usar fallback
+    print("⚠️ Usando frecuencia por defecto: 16000 Hz")
+    return 16000
+
+# Detectar la mejor frecuencia de muestreo automáticamente
+DETECTED_SAMPLE_RATE = detect_supported_sample_rate()
+DETECTED_CHUNK_SIZE = 512 if DETECTED_SAMPLE_RATE == 16000 else int(512 * (DETECTED_SAMPLE_RATE / 16000))
+
 # Cargar variables de entorno desde .env si existe
 try:
     from dotenv import load_dotenv
@@ -59,9 +95,8 @@ BUTTON_PIN = int(os.getenv('BUTTON_PIN', 22))
 LED_IDLE = int(os.getenv('LED_IDLE_PIN', 17))
 LED_RECORD = int(os.getenv('LED_RECORD_PIN', 27))
 
-# Configuración openWakeWord
-OPENWAKEWORD_MODEL_PATHS = os.getenv('OPENWAKEWORD_MODEL_PATHS', 'alexa,hey_mycroft').split(',')
-OPENWAKEWORD_THRESHOLD = float(os.getenv('OPENWAKEWORD_THRESHOLD', 0.5))
+# Configuración openWakeWord (se cargarán dinámicamente)
+OPENWAKEWORD_THRESHOLD = float(os.getenv('OPENWAKEWORD_THRESHOLD', 0.4))
 OPENWAKEWORD_VAD_THRESHOLD = float(os.getenv('OPENWAKEWORD_VAD_THRESHOLD', 0.0))
 OPENWAKEWORD_ENABLE_SPEEX_NS = os.getenv('OPENWAKEWORD_ENABLE_SPEEX_NS', 'false').lower() == 'true'
 OPENWAKEWORD_INFERENCE_FRAMEWORK = os.getenv('OPENWAKEWORD_INFERENCE_FRAMEWORK', 'onnx')
@@ -185,16 +220,10 @@ class VoiceAssistant:
     def _setup_openwakeword(self):
         """Configurar openWakeWord con modelos específicos"""
         
-        # TEMPORAL: Saltamos openWakeWord completamente por ahora
-        print("🔧 Modo de prueba: saltando openWakeWord - funcionará solo con botón GPIO")
-        self.oww_model = None
-        self.active_models = []
-        return
-        
         # Verificar si debemos intentar usar modelos de audio
-        mode = os.getenv('MODE', '').upper()
+        mode = os.getenv('MODE', 'HYBRID').upper()
         if mode == 'GPIO_ONLY':
-            print("🔧 Modo GPIO_ONLY activado - saltando inicialización de openWakeWord")
+            print("🔧 Modo GPIO_ONLY activado - funcionará solo con botón GPIO")
             self.oww_model = None
             self.active_models = []
             return
@@ -205,13 +234,11 @@ class VoiceAssistant:
             
             print("🔄 Inicializando openWakeWord...")
             
-            # Verificar si los modelos están especificados y no vacíos
-            model_paths = os.getenv('OPENWAKEWORD_MODEL_PATHS', 'alexa,hey_mycroft').strip()
+            # Verificar si los modelos están especificados
+            model_paths = os.getenv('OPENWAKEWORD_MODEL_PATHS', '').strip()
             if not model_paths:
-                print("🔧 OPENWAKEWORD_MODEL_PATHS vacío - funcionará solo con botón GPIO")
-                self.oww_model = None
-                self.active_models = []
-                return
+                print("🔧 OPENWAKEWORD_MODEL_PATHS vacío - usando todos los modelos preentrenados")
+            # Continuar con la inicialización en ambos casos
             
             # Descargar modelos preentrenados si es necesario
             try:
@@ -225,9 +252,9 @@ class VoiceAssistant:
                 self.active_models = []
                 return
             
-            # Configurar parámetros del modelo
+            # Configurar parámetros del modelo (forzar ONNX para evitar problemas con TFLite)
             model_kwargs = {
-                'inference_framework': OPENWAKEWORD_INFERENCE_FRAMEWORK
+                'inference_framework': 'onnx'  # Forzar ONNX debido a incompatibilidad NumPy con TFLite
             }
             
             # Añadir VAD si está habilitado
@@ -241,28 +268,41 @@ class VoiceAssistant:
             
             # Inicializar modelo con modelos específicos o todos
             try:
-                if OPENWAKEWORD_MODEL_PATHS and OPENWAKEWORD_MODEL_PATHS != ['']:
-                    # Filtrar modelos vacíos
-                    models = [m.strip() for m in OPENWAKEWORD_MODEL_PATHS if m.strip()]
-                    if models:
-                        model_kwargs['wakeword_models'] = models
-                        print(f"🔄 Intentando cargar modelos específicos: {models}")
-                    else:
-                        print("✅ Usando todos los modelos preentrenados")
+                # Obtener modelos dinámicamente del .env
+                model_paths_env = os.getenv('OPENWAKEWORD_MODEL_PATHS', '').strip()
+                
+                if model_paths_env:
+                    # Usar modelos específicos
+                    model_paths_list = [m.strip() for m in model_paths_env.split(',') if m.strip()]
+                    model_kwargs['wakeword_models'] = model_paths_list
+                    print(f"🔄 Intentando cargar modelos específicos: {model_paths_list}")
                 else:
-                    print("✅ Usando todos los modelos preentrenados")
+                    # Usar todos los modelos preentrenados (no especificar wakeword_models)
+                    print("✅ Usando todos los modelos preentrenados disponibles")
                 
                 # Crear modelo
                 self.oww_model = Model(**model_kwargs)
                 
-                # Obtener lista de modelos activos
-                self.active_models = list(self.oww_model.prediction_buffer.keys())
+                # Obtener lista de modelos activos (verificar en models, no en prediction_buffer)
+                self.active_models = list(self.oww_model.models.keys()) if hasattr(self.oww_model, 'models') and self.oww_model.models else []
                 print(f"✅ openWakeWord inicializado con {len(self.active_models)} modelos")
                 if self.active_models:
                     print(f"🎯 Modelos activos: {', '.join(self.active_models)}")
+                    print(f"🎚️ Umbral de activación: {OPENWAKEWORD_THRESHOLD}")
+                    print("🎙️ Wake words disponibles:")
+                    for model in self.active_models:
+                        if model in ['alexa']:
+                            print("   • Di 'Alexa' para activar")
+                        elif model in ['hey_mycroft']:
+                            print("   • Di 'Hey Mycroft' para activar")
+                        elif model in ['hey_jarvis']:
+                            print("   • Di 'Hey Jarvis' para activar")
+                        elif model in ['timer']:
+                            print("   • Di comandos de timer para activar")
+                        elif model in ['weather']:
+                            print("   • Di comandos de clima para activar")
                 else:
                     print("⚠️ No se cargaron modelos - funcionará solo con botón GPIO")
-                print(f"🎚️ Umbral de activación: {OPENWAKEWORD_THRESHOLD}")
                 
             except Exception as model_error:
                 print(f"⚠️ Error cargando modelos: {model_error}")
@@ -306,28 +346,41 @@ class VoiceAssistant:
 
     def _show_configuration(self):
         """Mostrar configuración actual"""
+        mode = os.getenv('MODE', 'HYBRID').upper()
         print("\n📋 CONFIGURACIÓN ACTUAL:")
         print(f"🎤 Audio: {AUDIO_SAMPLE_RATE}Hz, {AUDIO_CHANNELS} canal, chunks de {AUDIO_CHUNK_SIZE} samples")
+        print(f"⚙️  Modo: {mode}")
         
         if self.active_models:
             print(f"🧠 Modelos activos: {', '.join(self.active_models)}")
             print(f"🎚️ Umbral: {OPENWAKEWORD_THRESHOLD}")
             print(f"🔊 VAD: {'Habilitado' if OPENWAKEWORD_VAD_THRESHOLD > 0 else 'Deshabilitado'}")
             print(f"🔇 Speex NS: {'Habilitado' if OPENWAKEWORD_ENABLE_SPEEX_NS else 'Deshabilitado'}")
+            print("🎙️  Wake Words: Habilitadas")
         else:
             print("🧠 Modelos de audio: No disponibles")
-            print("🔘 Modo de funcionamiento: Solo botón GPIO")
+            print("🎙️  Wake Words: Deshabilitadas")
             
         print(f"🔴 LED Rojo (GPIO {LED_RECORD}): Escuchando")
         print(f"🟢 LED Verde (GPIO {LED_IDLE}): Listo")
         print(f"🔘 Botón (GPIO {BUTTON_PIN}): Activación manual")
         print(f"🤖 Transcripción: {TRANSCRIPTION_SERVICE_URL}")
         
-        if not self.active_models:
-            print("\n💡 INSTRUCCIONES:")
-            print("   • Presiona el botón GPIO 22 para activar el asistente")
-            print("   • El LED verde indica que está listo")
-            print("   • El LED rojo indica que está escuchando comandos")
+        print("\n💡 OPCIONES DE ACTIVACIÓN:")
+        if self.active_models:
+            print("   🎙️  COMANDOS DE VOZ:")
+            for model in self.active_models:
+                if model == 'alexa':
+                    print("      - Di 'Alexa' para activar")
+                elif model == 'hey_mycroft':
+                    print("      - Di 'Hey Mycroft' para activar") 
+                elif model == 'hey_jarvis':
+                    print("      - Di 'Hey Jarvis' para activar")
+        print("   🔘 ACTIVACIÓN MANUAL:")
+        print("      - Presiona el botón GPIO 22")
+        print("   📊 INDICADORES:")
+        print("      - LED verde: Listo para comandos")
+        print("      - LED rojo: Escuchando/procesando")
 
     def _set_state(self, new_state: str):
         """Cambiar estado del asistente y LEDs"""
@@ -357,29 +410,63 @@ class VoiceAssistant:
         except Exception as e:
             print(f"⚠️ Error parpadeando LED: {e}")
 
-    def _audio_callback(self, indata, frames, time_info, status):
-        """Callback para captura de audio"""
+    def _audio_callback_raw(self, indata, frames, time_info, status):
+        """Callback simplificado para RawInputStream (igual que Porcupine)"""
         if status:
             if 'input overflow' in str(status):
+                # Solo mostrar overflow ocasionalmente
                 if not hasattr(self, '_last_overflow_time') or time.time() - self._last_overflow_time > 5:
                     print(f"⚠️ Audio overflow detectado")
                     self._last_overflow_time = time.time()
             else:
                 print(f"⚠️ Status audio: {status}")
         
-        # Agregar audio a la cola
+        # Agregar audio raw directamente a la cola (como Porcupine)
         if self.audio_buffer.qsize() < 10:
-            self.audio_buffer.put(indata.copy())
+            self.audio_buffer.put(bytes(indata))
         else:
-            # Descartar datos antiguos si la cola está llena
+            # Si la cola está llena, descartar datos antiguos
             try:
                 self.audio_buffer.get_nowait()
-                self.audio_buffer.put(indata.copy())
+                self.audio_buffer.put(bytes(indata))
             except queue.Empty:
                 pass
 
+    def simple_resample(self, audio_data, original_rate, target_rate):
+        """Resample simple usando interpolación lineal (copiado de Porcupine)"""
+        if original_rate == target_rate:
+            return audio_data
+        
+        if len(audio_data) == 0:
+            return audio_data
+        
+        # Calcular ratio de resample
+        ratio = target_rate / original_rate
+        
+        # Número de muestras en el audio original y objetivo
+        original_length = len(audio_data)
+        target_length = int(np.round(original_length * ratio))
+        
+        if target_length <= 0:
+            return np.array([], dtype=audio_data.dtype)
+        
+        # Crear índices para interpolación
+        if target_length == 1:
+            indices = np.array([original_length // 2])
+        else:
+            indices = np.linspace(0, original_length - 1, target_length)
+        
+        # Interpolar
+        resampled = np.interp(indices, np.arange(original_length), audio_data)
+        
+        return resampled.astype(audio_data.dtype)
+
     def _process_audio_for_wakeword(self):
-        """Procesar audio para detectar wake words"""
+        """Procesar audio para detectar wake words usando el enfoque Porcupine"""
+        # Buffer para acumular audio (como Porcupine)
+        audio_buffer_raw = np.array([], dtype=np.int16)
+        target_frame_length = 1280  # openWakeWord requiere 1280 frames (80ms @ 16kHz)
+        
         while not self.should_stop:
             try:
                 # Verificar activación manual del botón siempre
@@ -394,32 +481,93 @@ class VoiceAssistant:
                     time.sleep(0.1)
                     continue
                 
-                # Obtener chunk de audio si hay modelos disponibles
+                # Obtener audio raw de la cola
                 try:
-                    audio_chunk = self.audio_buffer.get(timeout=0.1)
+                    audio_data = self.audio_buffer.get(timeout=0.1)
+                    pcm = np.frombuffer(audio_data, dtype=np.int16)
                     
-                    # Convertir a formato requerido (mono, int16)
-                    if audio_chunk.ndim > 1:
-                        audio_chunk = audio_chunk[:, 0]  # Tomar solo el primer canal
+                    # Resample si es necesario (como Porcupine)
+                    if DETECTED_SAMPLE_RATE != 16000:
+                        resampled_pcm = self.simple_resample(pcm, DETECTED_SAMPLE_RATE, 16000)
+                    else:
+                        resampled_pcm = pcm
                     
-                    # Convertir a int16 si es necesario
-                    if audio_chunk.dtype != np.int16:
-                        audio_chunk = (audio_chunk * 32767).astype(np.int16)
+                    # Acumular audio en buffer
+                    audio_buffer_raw = np.concatenate([audio_buffer_raw, resampled_pcm])
                     
-                    # Ejecutar predicción con openWakeWord
-                    prediction = self.oww_model.predict(audio_chunk)
+                    # Limitar el tamaño del buffer para evitar que crezca indefinidamente
+                    max_buffer_size = target_frame_length * 10  # Máximo 10 frames
+                    if len(audio_buffer_raw) > max_buffer_size:
+                        audio_buffer_raw = audio_buffer_raw[-max_buffer_size:]
                     
-                    # Verificar si algún modelo supera el umbral
-                    for model_name, score in prediction.items():
-                        if score > OPENWAKEWORD_THRESHOLD:
-                            print(f"🎯 Wake word detectada: '{model_name}' (score: {score:.3f})")
-                            self._handle_wakeword_detected(model_name, score)
-                            break
+                    # Procesar frames completos
+                    while len(audio_buffer_raw) >= target_frame_length:
+                        # Extraer exactamente el frame requerido
+                        frame = audio_buffer_raw[:target_frame_length]
+                        audio_buffer_raw = audio_buffer_raw[target_frame_length:]
+                        
+                        # Ejecutar predicción con openWakeWord
+                        prediction = self.oww_model.predict(frame.astype(np.int16))
+                        
+                        # Debug: mostrar scores ocasionalmente
+                        if not hasattr(self, '_last_debug_time'):
+                            self._last_debug_time = time.time()
+                            self._debug_counter = 0
+                        
+                        self._debug_counter += 1
+                        if time.time() - self._last_debug_time > 30:  # Cada 30 segundos (menos spam)
+                            max_score = max(prediction.values()) if prediction else 0
+                            if max_score > 0.2:  # Solo mostrar si hay actividad significativa
+                                print(f"🔍 Audio activo - alexa={prediction.get('alexa', 0):.3f}, hey_mycroft={prediction.get('hey_mycroft', 0):.3f}")
+                            else:
+                                print(f"🔍 Sistema funcionando (frames procesados: {self._debug_counter})")
+                            self._last_debug_time = time.time()
+                            self._debug_counter = 0
+                        
+                        # Verificar si algún modelo supera el umbral (con cooldown mejorado)
+                        current_time = time.time()
+                        if not hasattr(self, '_last_detection_time'):
+                            self._last_detection_time = 0
+                        
+                        # Cooldown de 5 segundos entre detecciones (aumentado)
+                        if current_time - self._last_detection_time > 5:
+                            for model_name, score in prediction.items():
+                                if score > OPENWAKEWORD_THRESHOLD:
+                                    print(f"🎯 Wake word detectada: '{model_name}' (score: {score:.3f})")
+                                    self._last_detection_time = current_time
+                                    
+                                    # LIMPIAR COMPLETAMENTE todos los buffers
+                                    audio_buffer_raw = np.array([], dtype=np.int16)
+                                    
+                                    # Vaciar cola de audio completamente
+                                    while not self.audio_buffer.empty():
+                                        try:
+                                            self.audio_buffer.get_nowait()
+                                        except queue.Empty:
+                                            break
+                                    
+                                    print("🧹 Buffers limpiados - procesando comando...")
+                                    self._handle_wakeword_detected(model_name, score)
+                                    
+                                    # Pausa más larga para permitir que termines de hablar
+                                    time.sleep(1.5)
+                                    
+                                    # Limpiar una vez más después del comando
+                                    while not self.audio_buffer.empty():
+                                        try:
+                                            self.audio_buffer.get_nowait()
+                                        except queue.Empty:
+                                            break
+                                    
+                                    print("👂 Listo para nueva wake word...")
+                                    break
+                            else:
+                                continue
+                            break  # Salir del while si se detectó wake word
                             
                 except queue.Empty:
                     continue
                 except Exception as audio_error:
-                    # Si hay error con audio, continuar solo con botón
                     print(f"⚠️ Error procesando audio (continuando con botón): {audio_error}")
                     time.sleep(0.1)
                     continue
@@ -429,98 +577,113 @@ class VoiceAssistant:
                 time.sleep(0.1)
 
     def _handle_wakeword_detected(self, model_name: str, score: float):
-        """Manejar detección de wake word"""
+        """Manejar detección de wake word con limpieza completa"""
         print(f"🎉 Wake word '{model_name}' detectada con score {score:.3f}")
         self._set_state(AssistantState.LISTENING)
+        
+        # Pausa adicional para que termine la palabra "Alexa"
+        time.sleep(0.3)
+        
+        # Limpiar cualquier residuo de audio de la wake word
+        cleanup_count = 0
+        while not self.audio_buffer.empty() and cleanup_count < 50:
+            try:
+                self.audio_buffer.get_nowait()
+                cleanup_count += 1
+            except queue.Empty:
+                break
+        
+        if cleanup_count > 0:
+            print(f"🧹 Limpiados {cleanup_count} frames residuales de wake word")
         
         # Grabar comando de voz
         self._handle_voice_command()
         
         # Volver al estado idle
         self._set_state(AssistantState.IDLE)
+        
+        # Limpieza final
+        final_cleanup = 0
+        while not self.audio_buffer.empty() and final_cleanup < 20:
+            try:
+                self.audio_buffer.get_nowait()
+                final_cleanup += 1
+            except queue.Empty:
+                break
 
     def _handle_voice_command(self):
-        """Grabar y procesar comando de voz"""
+        """Grabar y procesar comando de voz (corregido para arrays raw)"""
         try:
             print("🎤 Grabando comando...")
             
             # Limpiar buffer de audio
             while not self.audio_buffer.empty():
-                self.audio_buffer.get()
+                try:
+                    self.audio_buffer.get_nowait()
+                except queue.Empty:
+                    break
             
-            # Grabar por tiempo limitado o hasta silencio
-            frames = []
-            silence_count = 0
-            max_silence_frames = 40  # ~0.8 segundos de silencio
+            # Esperar un momento para que el buffer se llene de nuevo
+            time.sleep(0.2)
+            
+            # Grabar por tiempo limitado
+            raw_frames = []
             max_recording_time = 5  # 5 segundos máximo
-            
             start_time = time.time()
+            
+            print("📢 Habla ahora...")
             
             while time.time() - start_time < max_recording_time:
                 try:
-                    audio_chunk = self.audio_buffer.get(timeout=0.1)
-                    frames.append(audio_chunk)
-                    
-                    # Detectar silencio si VAD está disponible
-                    if self.vad:
-                        # Convertir a formato para VAD
-                        if audio_chunk.ndim > 1:
-                            audio_chunk = audio_chunk[:, 0]
-                        if audio_chunk.dtype != np.int16:
-                            audio_chunk = (audio_chunk * 32767).astype(np.int16)
-                        
-                        # VAD requiere frames de 10, 20 o 30ms
-                        frame_size = 320  # 20ms @ 16kHz
-                        if len(audio_chunk) >= frame_size:
-                            is_speech = self.vad.is_speech(audio_chunk[:frame_size].tobytes(), AUDIO_SAMPLE_RATE)
-                            if not is_speech:
-                                silence_count += 1
-                            else:
-                                silence_count = 0
-                            
-                            if silence_count > max_silence_frames:
-                                print("🔇 Silencio detectado, finalizando grabación")
-                                break
+                    # Obtener audio raw como bytes
+                    audio_data = self.audio_buffer.get(timeout=0.2)
+                    raw_frames.append(audio_data)
                     
                 except queue.Empty:
-                    silence_count += 1
-                    if silence_count > max_silence_frames:
-                        break
+                    # Si no hay audio por un tiempo, terminar grabación
+                    break
             
-            if frames:
-                # Concatenar audio grabado
-                audio_data = np.concatenate(frames)
-                if audio_data.ndim > 1:
-                    audio_data = audio_data[:, 0]
+            if raw_frames:
+                # Unir todos los frames raw (bytes)
+                raw_audio = b''.join(raw_frames)
                 
-                # Crear archivo WAV
-                wav_bytes = self._create_wav_file(audio_data)
+                # Convertir a numpy array
+                audio_array = np.frombuffer(raw_audio, dtype=np.int16)
                 
-                # Enviar a transcripción
-                self._set_state(AssistantState.PROCESSING)
-                transcription = self._send_to_transcription_service(wav_bytes)
-                
-                if transcription:
-                    print(f"🗣️  Transcripción: '{transcription}'")
-                    self._execute_command(transcription)
+                if len(audio_array) > 0:
+                    # Crear archivo WAV
+                    wav_bytes = self._create_wav_file(audio_array)
+                    
+                    # Enviar a transcripción
+                    self._set_state(AssistantState.PROCESSING)
+                    transcription = self._send_to_transcription_service(wav_bytes)
+                    
+                    if transcription:
+                        print(f"🗣️  Transcripción: '{transcription}'")
+                        self._execute_command(transcription)
+                    else:
+                        print("❌ No se pudo transcribir el audio")
                 else:
-                    print("❌ No se pudo transcribir el audio")
+                    print("❌ Audio grabado vacío")
             else:
                 print("❌ No se grabó audio")
                 
         except Exception as e:
             print(f"❌ Error procesando comando de voz: {e}")
+            import traceback
+            print(f"🔍 Detalles del error: {traceback.format_exc()}")
 
     def _create_wav_file(self, audio_data: np.ndarray) -> bytes:
-        """Crear archivo WAV en memoria"""
+        """Crear archivo WAV en memoria (compatible con RawInputStream)"""
+        # Asegurar que sea int16
         if audio_data.dtype != np.int16:
             audio_data = (audio_data * 32767).astype(np.int16)
         
         buffer = io.BytesIO()
         with wave.open(buffer, 'wb') as wav_file:
-            wav_file.setnchannels(AUDIO_CHANNELS)
+            wav_file.setnchannels(1)  # Mono (RawInputStream es mono)
             wav_file.setsampwidth(2)  # 16-bit
-            wav_file.setframerate(AUDIO_SAMPLE_RATE)
+            wav_file.setframerate(16000)  # Siempre 16000Hz después del resample
             wav_file.writeframes(audio_data.tobytes())
         
         return buffer.getvalue()
@@ -561,90 +724,48 @@ class VoiceAssistant:
             print(f"💡 Comandos disponibles: {list(self.commands.keys())}")
 
     def run(self):
-        """Ejecutar el asistente de voz"""
+        """Ejecutar el asistente de voz usando el enfoque exitoso de Porcupine"""
+        global AUDIO_SAMPLE_RATE
         try:
             print("\n🚀 Iniciando asistente de voz...")
             self._set_state(AssistantState.IDLE)
             
-            # Iniciar hilo de procesamiento de audio/botón
+            # Iniciar hilo de procesamiento de audio/botón usando enfoque Porcupine
             audio_thread = threading.Thread(target=self._process_audio_for_wakeword, daemon=True)
             audio_thread.start()
+            print("🔄 Hilo de procesamiento de audio iniciado")
             
             # Verificar si tenemos modelos de audio
             if self.active_models:
-                print("🎧 Verificando dispositivos de audio...")
-                try:
-                    devices = sd.query_devices()
-                    print(f"📋 Dispositivos de audio encontrados: {len(devices)}")
-                    
-                    # Buscar dispositivo de entrada por defecto
-                    default_input = sd.default.device[0] if sd.default.device[0] is not None else 0
-                    print(f"🎤 Dispositivo de entrada por defecto: {default_input}")
-                    
-                    # Verificar si el dispositivo soporta la configuración deseada
-                    try:
-                        sd.check_input_settings(
-                            device=default_input,
-                            channels=AUDIO_CHANNELS,
-                            samplerate=AUDIO_SAMPLE_RATE,
-                            dtype='float32'
-                        )
-                        print(f"✅ Configuración de audio verificada: {AUDIO_SAMPLE_RATE}Hz, {AUDIO_CHANNELS} canal")
-                    except Exception as e:
-                        print(f"⚠️ Configuración no soportada: {e}")
-                        print("🔄 Probando configuraciones alternativas...")
-                        
-                        # Intentar con diferentes frecuencias de muestreo
-                        sample_rates = [16000, 44100, 48000, 22050, 8000]
-                        working_rate = None
-                        
-                        for rate in sample_rates:
-                            try:
-                                sd.check_input_settings(
-                                    device=default_input,
-                                    channels=AUDIO_CHANNELS,
-                                    samplerate=rate,
-                                    dtype='float32'
-                                )
-                                working_rate = rate
-                                print(f"✅ Configuración alternativa encontrada: {rate}Hz")
-                                break
-                            except:
-                                continue
-                        
-                        if working_rate:
-                            global AUDIO_SAMPLE_RATE
-                            AUDIO_SAMPLE_RATE = working_rate
-                            print(f"🔧 Usando frecuencia de muestreo: {AUDIO_SAMPLE_RATE}Hz")
-                        else:
-                            print("❌ No se encontró configuración de audio compatible")
-                            print("🔄 Funcionando solo con botón GPIO")
-                            raise RuntimeError("No hay configuración de audio compatible")
-                            
-                except Exception as e:
-                    print(f"⚠️ Error verificando audio: {e}")
-                    print("🔄 Funcionando solo con botón GPIO")
+                print("🎧 Iniciando captura de audio con enfoque Porcupine...")
                 
-                # Iniciar captura de audio con configuración verificada
                 try:
-                    with sd.InputStream(
-                        channels=AUDIO_CHANNELS,
-                        samplerate=AUDIO_SAMPLE_RATE,
-                        dtype='float32',
-                        blocksize=AUDIO_CHUNK_SIZE,
-                        callback=self._audio_callback,
-                        device=default_input
+                    # Usar RawInputStream como en Porcupine (más simple y funcional)
+                    with sd.RawInputStream(
+                        samplerate=DETECTED_SAMPLE_RATE,  # Frecuencia detectada automáticamente
+                        blocksize=DETECTED_CHUNK_SIZE,    # Blocksize ajustado
+                        dtype='int16', 
+                        channels=1,
+                        callback=self._audio_callback_raw
                     ):
-                        print("🎧 Captura de audio iniciada")
+                        print(f"✅ Audio iniciado: {DETECTED_SAMPLE_RATE}Hz, blocksize={DETECTED_CHUNK_SIZE}")
+                        if DETECTED_SAMPLE_RATE == 16000:
+                            print("🎵 Audio optimizado: 16000 Hz directo (sin resample)")
+                        else:
+                            print(f"🎵 Audio: {DETECTED_SAMPLE_RATE} Hz → resample → 16000 Hz")
+                        
                         print("👂 Escuchando wake words y botón GPIO...")
                         print("💡 Presiona Ctrl+C para detener")
                         
-                        # Loop principal con audio
+                        # Buffer para audio (igual que Porcupine)
+                        self.audio_buffer_raw = np.array([], dtype=np.int16)
+                        
+                        # Loop principal simplificado 
                         while not self.should_stop:
                             time.sleep(0.1)
                             
                 except Exception as audio_error:
-                    print(f"❌ Error específico de audio: {audio_error}")
+                    print(f"❌ Error de audio: {audio_error}")
                     print("🔧 Funcionando solo con botón GPIO...")
                     
                     # Modo sin audio: solo botón GPIO

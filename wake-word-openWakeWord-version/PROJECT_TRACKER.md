@@ -14,12 +14,12 @@
 - [x] Implementar sistema de buffering de audio eficiente
 - [x] Probar detección básica de wake word y log de activaciones
 
-## Fase 3: Integración con lógica del asistente
-- [ ] Adaptar la lógica de activación (sustituir Porcupine por openWakeWord en el flujo principal)
-- [ ] Integrar con el sistema de comandos (ejecución tras detección de wake word)
-- [ ] Mantener compatibilidad con LEDs y botón físico (GPIO)
-- [ ] Implementar gestión de estados (IDLE, LISTENING, PROCESSING)
-- [ ] Añadir tests de integración para la activación y flujo de comandos
+## Fase 3: Integración con lógica del asistente ✅ COMPLETADA
+- [x] Adaptar la lógica de activación (sustituir Porcupine por openWakeWord en el flujo principal)
+- [x] Integrar con el sistema de comandos (ejecución tras detección de wake word)
+- [x] Mantener compatibilidad con LEDs y botón físico (GPIO)
+- [x] Implementar gestión de estados (IDLE, LISTENING, PROCESSING)
+- [x] Añadir tests de integración para la activación y flujo de comandos
 
 ## Fase 4: Optimización y robustez
 - [ ] **Configuración de parámetros avanzados:**
