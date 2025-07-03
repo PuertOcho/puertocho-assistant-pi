@@ -174,7 +174,7 @@ class VoiceAssistant:
                 print(f"🎯 Wake words: Hey Google, Alexa (keywords genéricos)")
         
         print(f"🔴 LED Rojo (GPIO {LED_RECORD}): Escuchando")
-        print(f"🟢 LED Verde (GPIO {LED_IDLE}): Listo")
+        print(f"🟢 LED Verde (GPIO {LED_IDLE}): Solo control por comandos de voz")
         print(f"🔘 Botón (GPIO {BUTTON_PIN}): Activación manual")
         print(f"🤖 Transcripción: Servicio HTTP Local ({TRANSCRIPTION_SERVICE_URL})")
         if CAPTURE_RATE == PORCUPINE_RATE:
@@ -209,8 +209,8 @@ class VoiceAssistant:
             GPIO.setup(LED_RECORD, GPIO.OUT)
             GPIO.setup(BUTTON_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
             
-            # Estado inicial: LED verde encendido
-            GPIO.output(LED_IDLE, GPIO.HIGH)
+            # Estado inicial: LED verde apagado (solo control por voz), LED rojo apagado
+            GPIO.output(LED_IDLE, GPIO.LOW)
             GPIO.output(LED_RECORD, GPIO.LOW)
             
             print("✅ GPIO configurado correctamente")
@@ -393,18 +393,17 @@ class VoiceAssistant:
                 pass
 
     def _set_state(self, new_state: str):
-        """Cambiar estado del asistente y LEDs"""
+        """Cambiar estado del asistente y LED de grabación (rojo)"""
         self.state = new_state
         try:
             if new_state == AssistantState.IDLE:
-                GPIO.output(LED_IDLE, GPIO.HIGH)
+                # Solo controlar LED rojo - LED verde controlado por comandos de voz únicamente
                 GPIO.output(LED_RECORD, GPIO.LOW)
             elif new_state == AssistantState.LISTENING:
-                GPIO.output(LED_IDLE, GPIO.LOW)
+                # Solo controlar LED rojo - LED verde controlado por comandos de voz únicamente
                 GPIO.output(LED_RECORD, GPIO.HIGH)
             elif new_state == AssistantState.PROCESSING:
-                # Parpadear LED rojo durante procesamiento
-                GPIO.output(LED_IDLE, GPIO.LOW)
+                # Parpadear LED rojo durante procesamiento - LED verde no se toca
                 self._blink_led(LED_RECORD, 0.2, 3)
         except Exception as e:
             print(f"⚠️ Error controlando LEDs: {e}")
