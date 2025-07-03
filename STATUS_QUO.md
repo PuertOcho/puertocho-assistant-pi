@@ -20,9 +20,16 @@ El asistente funciona en Raspberry Pi con `openWakeWord` para la detección de p
 | 2 | Integración básica `openWakeWord` | ✅ Completada |
 | 3 | Integración con lógica del asistente | ✅ Completada |
 | 4 | Optimización & robustez | ✅ Completada (penden subtareas menores de optimización) |
-| 5 | Entrenamiento modelo "Puertocho" | 🔄 En progreso |
+| 5 | Entrenamiento modelo "Puertocho" | 🔄 En progreso (test simplificado ✅) |
 | 6 | Validación & despliegue | ⏳ Pendiente |
 | 7 | Mejoras avanzadas | ⏳ Pendiente |
+
+### **Entrenamiento simplificado (03-Jul-2025)**
+- Se creó `simple_trainer.py` evitando dependencias conflictivas.
+- Dataset usado para test: 100 positivos + 200 negativos.
+- Resultado: Loss 0.27 / Acc 68% en 5 épocas.
+- Modelo generado: `test_models/puertocho_test_best.pth` (704 KB).
+- Próximo paso: entrenamiento completo con 503 positivos + 5 000 negativos.
 
 ---
 

@@ -123,6 +123,11 @@ class VoiceAssistant:
         # Buffer para acumular audio
         self.audio_buffer = queue.Queue()
         
+        # Inicializar variables para modelo personalizado
+        self.custom_model_mode = False
+        self.onnx_session = None
+        self.puertocho_audio_buffer = []
+        
         # Cargar comandos
         self._load_commands()
         
@@ -231,14 +236,39 @@ class VoiceAssistant:
         try:
             import openwakeword
             from openwakeword.model import Model
+            import onnxruntime as ort
+            from pathlib import Path
             
             print("🔄 Inicializando openWakeWord...")
             
-            # Verificar si los modelos están especificados
+            # Obtener modelos desde configuración
             model_paths = os.getenv('OPENWAKEWORD_MODEL_PATHS', '').strip()
+            
+            # Verificar si tenemos modelo personalizado Puertocho
+            custom_model_path = Path('checkpoints/puertocho.onnx')
+            has_custom_model = custom_model_path.exists()
+            
+            if has_custom_model:
+                print(f"🎯 Modelo personalizado Puertocho detectado: {custom_model_path}")
+                print(f"📊 Tamaño: {custom_model_path.stat().st_size / 1024:.1f} KB")
+                
+                # Verificar que el modelo ONNX funciona
+                try:
+                    session = ort.InferenceSession(str(custom_model_path))
+                    print("✅ Modelo Puertocho validado exitosamente")
+                    print(f"📊 Input: {session.get_inputs()[0].shape}")
+                    print(f"📊 Output: {session.get_outputs()[0].shape}")
+                    
+                    # Usar modelo personalizado directamente
+                    self._setup_custom_puertocho_model(custom_model_path)
+                    return
+                    
+                except Exception as e:
+                    print(f"❌ Error validando modelo Puertocho: {e}")
+                    print("🔄 Fallback a modelos preentrenados...")
+            
             if not model_paths:
                 print("🔧 OPENWAKEWORD_MODEL_PATHS vacío - usando todos los modelos preentrenados")
-            # Continuar con la inicialización en ambos casos
             
             # Descargar modelos preentrenados si es necesario
             try:
@@ -320,6 +350,78 @@ class VoiceAssistant:
             self.oww_model = None
             self.active_models = []
 
+    def _setup_custom_puertocho_model(self, model_path):
+        """Configurar modelo personalizado Puertocho con ONNX directo"""
+        try:
+            import onnxruntime as ort
+            
+            print("🎯 Configurando modelo personalizado Puertocho...")
+            
+            # Cargar modelo ONNX directamente
+            self.onnx_session = ort.InferenceSession(str(model_path))
+            self.oww_model = None  # No usar openWakeWord estándar
+            self.active_models = ['puertocho']
+            self.custom_model_mode = True
+            
+            # Buffer para acumular audio para nuestro modelo (necesita 1 segundo = 16000 samples)
+            self.puertocho_audio_buffer = []
+            
+            print("✅ Modelo Puertocho configurado exitosamente")
+            print(f"🎯 Wake word activa: 'Puertocho'")
+            print(f"🎚️ Threshold: {OPENWAKEWORD_THRESHOLD}")
+            
+        except Exception as e:
+            print(f"❌ Error configurando modelo Puertocho: {e}")
+            print("🔄 Fallback a modelos preentrenados...")
+            self.oww_model = None
+            self.active_models = []
+            self.custom_model_mode = False
+
+    def _process_puertocho_audio(self, audio_frame):
+        """Procesar audio con modelo Puertocho personalizado"""
+        try:
+            # Convertir a float32 y normalizar
+            if audio_frame.dtype == np.int16:
+                audio_float = audio_frame.astype(np.float32) / 32768.0
+            else:
+                audio_float = audio_frame.astype(np.float32)
+            
+            # Añadir al buffer
+            self.puertocho_audio_buffer.extend(audio_float)
+            
+            # Mantener ventana deslizante de 1 segundo (16000 samples)
+            if len(self.puertocho_audio_buffer) >= 16000:
+                # Tomar últimos 16000 samples
+                audio_window = np.array(self.puertocho_audio_buffer[-16000:], dtype=np.float32)
+                
+                # Preparar input para ONNX (batch_size=1, samples=16000)
+                model_input = audio_window.reshape(1, -1)
+                
+                # Ejecutar inferencia
+                result = self.onnx_session.run(None, {'audio': model_input})
+                raw_score = result[0][0][0]
+                
+                # Aplicar sigmoid para obtener probabilidad
+                probability = 1 / (1 + np.exp(-raw_score))
+                
+                # Verificar detección
+                if probability > OPENWAKEWORD_THRESHOLD:
+                    print(f"🎉 ¡PUERTOCHO DETECTADO! Probabilidad: {probability:.3f}")
+                    self._handle_wakeword_detected('puertocho', probability)
+                    # Limpiar buffer después de detección
+                    self.puertocho_audio_buffer = []
+                
+                # Limitar tamaño del buffer (mantener últimos 2 segundos)
+                if len(self.puertocho_audio_buffer) > 32000:
+                    self.puertocho_audio_buffer = self.puertocho_audio_buffer[-16000:]
+                    
+                return probability
+                
+        except Exception as e:
+            print(f"⚠️ Error procesando audio Puertocho: {e}")
+            
+        return 0.0
+
     def _verify_transcription_service(self):
         """Verificar que el servicio de transcripción esté disponible"""
         try:
@@ -370,7 +472,9 @@ class VoiceAssistant:
         if self.active_models:
             print("   🎙️  COMANDOS DE VOZ:")
             for model in self.active_models:
-                if model == 'alexa':
+                if model == 'puertocho':
+                    print("      - Di 'Puertocho' para activar (MODELO PERSONALIZADO)")
+                elif model == 'alexa':
                     print("      - Di 'Alexa' para activar")
                 elif model == 'hey_mycroft':
                     print("      - Di 'Hey Mycroft' para activar") 
@@ -477,7 +581,7 @@ class VoiceAssistant:
                     continue
                 
                 # Si no hay modelos de audio, solo manejar botón
-                if not self.oww_model or not self.active_models:
+                if not self.active_models:
                     time.sleep(0.1)
                     continue
                 
@@ -506,8 +610,14 @@ class VoiceAssistant:
                         frame = audio_buffer_raw[:target_frame_length]
                         audio_buffer_raw = audio_buffer_raw[target_frame_length:]
                         
-                        # Ejecutar predicción con openWakeWord
-                        prediction = self.oww_model.predict(frame.astype(np.int16))
+                        # Verificar si usamos modelo personalizado Puertocho
+                        if hasattr(self, 'custom_model_mode') and self.custom_model_mode:
+                            # Usar nuestro modelo personalizado Puertocho
+                            probability = self._process_puertocho_audio(frame)
+                            prediction = {'puertocho': probability}
+                        else:
+                            # Usar openWakeWord estándar
+                            prediction = self.oww_model.predict(frame.astype(np.int16))
                         
                         # Debug: mostrar scores ocasionalmente
                         if not hasattr(self, '_last_debug_time'):

@@ -56,15 +56,8 @@
   - [ ] Generar/descargar datos negativos (~30,000 horas recomendadas)
   - [ ] Subir dataset a Cloud Storage si usas Google Cloud
 - [ ] **Entrenamiento:**
-  - [ ] **Si usas Google Cloud T4:**
-    - [ ] Adaptar scripts de entrenamiento existentes (train_spanish_*.py → train_puertocho_*.py)
-    - [ ] Configurar Wandb para monitoreo (modo offline funcional)
-    - [ ] Usar configuración optimizada para T4: batch_size=8, learning_rate=1e-4
-  - [ ] **Si usas Google Colab:**
-    - [ ] Usar notebook oficial de openWakeWord para entrenamiento
-    - [ ] Configurar parámetros de entrenamiento (épocas, batch size, etc.)
-  - [ ] Entrenar modelo (tiempo estimado: <1 hora)
-  - [ ] Validar rendimiento del modelo entrenado
+  - [x] Test de entrenamiento simplificado (100 pos / 200 neg) ✅
+  - [ ] Entrenamiento completo con dataset full 🔄 (en progreso)
 - [ ] **Integración del modelo personalizado:**
   - [ ] Descargar modelo `.onnx` o `.tflite` entrenado
   - [ ] Integrar en checkpoints del proyecto
