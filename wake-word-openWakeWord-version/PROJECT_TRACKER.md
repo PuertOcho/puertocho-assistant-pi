@@ -21,7 +21,7 @@
 - [x] Implementar gestión de estados (IDLE, LISTENING, PROCESSING)
 - [x] Añadir tests de integración para la activación y flujo de comandos
 
-## Fase 4: Optimización y robustez 🔄 EN PROGRESO
+## Fase 4: Optimización y robustez ✅ COMPLETADA
 - [x] **Configuración de parámetros avanzados:**
   - [x] Ajustar umbral de activación (threshold) según entorno - Subido a 0.6 para evitar detecciones múltiples
   - [x] Configurar VAD (Voice Activity Detection) con `vad_threshold` - Implementado y configurable
@@ -37,7 +37,7 @@
 - [ ] Permitir selección/cambio de modelo de wake word (personalización)
 - [ ] Implementar fallback a modelos preentrenados si falla el personalizado
 
-## Fase 5: Entrenamiento de modelo personalizado "Puertocho"
+## Fase 5: Entrenamiento de modelo personalizado "Puertocho" 🔄 EN PROGRESO
 - [ ] **Preparación del entorno de entrenamiento:**
   - [ ] **OPCIÓN RECOMENDADA: Google Cloud GPU T4** (basado en experiencia previa exitosa)
     - [ ] Configurar instancia con GPU T4 (similar a docs/FASE_3_IMPLEMENTACION_CLOUD.md)
