@@ -8,7 +8,17 @@
 
 ## 1. Visión general
 
-El asistente funciona en Raspberry Pi con `openWakeWord` para la detección de palabra clave. Tras problemas de *false-positives* con modelos genéricos ("alexa"), se decidió entrenar un modelo personalizado **"Puertocho"**. Las fases 1-4 se han completado; la Fase 5 (entrenamiento) está en curso con una instancia GPU en Google Cloud.
+El asistente funciona en Raspberry Pi con dos versiones disponibles:
+
+1. **🎯 wake-word-porcupine-version (ACTIVA)**:
+   - Detección de wake word con Porcupine
+   - Soporte para conversaciones multivuelta
+   - Integración con TTS y slot-filling
+   - Modo fallback a comandos locales
+
+2. **⏳ wake-word-openWakeWord-version (EN DESARROLLO)**:
+   - Entrenamiento de modelo personalizado "Puertocho"
+   - Fase 5 (entrenamiento) en curso con GPU en Google Cloud
 
 ---
 
@@ -50,6 +60,22 @@ El asistente funciona en Raspberry Pi con `openWakeWord` para la detección de p
 
 ## 4. Configuración actual en Raspberry Pi
 
+### 4.1 Configuración Porcupine (ACTIVA)
+
+| Parámetro | Valor |
+|-----------|-------|
+| `PORCUPINE_ACCESS_KEY` | Requerido (configurar en `.env`) |
+| `ASSISTANT_CHAT_URL` | `http://192.168.1.88:8080/api/assistant/chat` |
+| `TRANSCRIPTION_SERVICE_URL` | `http://192.168.1.88:5000/transcribe` (fallback) |
+| Wake words | "Hola Puertocho", "Oye Puertocho" |
+| Fallback wake words | "Hey Google", "Alexa" |
+| Audio | 16 kHz, 1 canal, 512 samples |
+| GPIO | Botón 22, LED verde 17 (IDLE), LED rojo 27 (RECORD) |
+| Detección silencio | WebRTC VAD nivel 2 |
+| Cool-down detección | 0.8 segundos |
+
+### 4.2 Configuración OpenWakeWord (EN DESARROLLO)
+
 | Parámetro | Valor |
 |-----------|-------|
 | `OPENWAKEWORD_THRESHOLD` | **0.6** |
@@ -62,7 +88,6 @@ El asistente funciona en Raspberry Pi con `openWakeWord` para la detección de p
 | GPIO | Botón 22, LED verde 17 (IDLE), LED rojo 27 (RECORD) |
 
 \* Se espera reemplazarlos por `checkpoints/puertocho.onnx` cuando el modelo esté listo.
-
 † Wake-words genéricas empleadas sólo para pruebas temporales.
 
 ### Servicios & Scripts relevantes
@@ -73,57 +98,99 @@ El asistente funciona en Raspberry Pi con `openWakeWord` para la detección de p
 
 ---
 
-## 5. Infraestructura Google Cloud
+## 5. Sistema Conversacional Implementado
 
-| Recurso | Valor |
-|---------|-------|
-| **Proyecto GCP** | `puertocho-wakeword-training` |
-| **Billing Account** | `01D005-255612-3CCE8D` (vinculada) |
-| **Cuota GPU T4** | 1 unidad global (aprobada) |
+### 5.1 Arquitectura
 
-### Instancias activas (03-Jul-2025)
+```mermaid
+graph TD
+    A[🎤 Raspberry Pi<br/>Wake Word Detectado] --> B[🎙️ Grabación de Audio]
+    B --> C[📡 Transcripción Local<br/>wav → text]
+    C --> D[📤 Envío al Servidor<br/>POST /api/assistant/chat]
+    
+    D --> E{🤖 Servidor<br/>Intent Manager}
+    E --> F[🧠 DialogManager<br/>Slot Filling]
+    F --> G[💾 Redis<br/>Conversation State]
+    F --> H[🎯 NLU Service<br/>Intent + Entities]
+    
+    H --> I{¿Conversación<br/>Completa?}
+    I -->|❌ No| J[❓ Pregunta de<br/>Seguimiento]
+    I -->|✅ Sí| K[⚡ Ejecutar Acción]
+    
+    J --> L[🔊 TTS Service<br/>Text → Audio]
+    K --> L
+    
+    L --> M[📦 Respuesta JSON<br/>+ Audio URL]
+    M --> N[📡 Envío a Raspberry Pi]
+    
+    N --> O[🔊 Reproducción Audio TTS]
+    O --> P[💡 Actualización LEDs]
+    P --> Q[👂 Esperar próximo comando]
+```
 
-| Nombre | Zona | Tipo máquina | GPU | Disco | Estado | Creación |
-|--------|------|--------------|-----|-------|--------|----------|
-| `puertocho-training` | us-central1-b | `g2-standard-4` | 1× NVIDIA L4 | 100 GB NVMe | **RUNNING** | 2025-07-03 07:38 UTC |
+### 5.2 Estructura de datos
 
-Detalles adicionales de la VM:
+#### ChatRequest (Raspberry Pi → Servidor)
+```json
+{
+  "message": "enciende las luces",
+  "sessionId": "uuid-de-sesion",
+  "generateAudio": true,
+  "language": "es",
+  "voice": "es_female",
+  "deviceContext": {
+    "deviceType": "raspberry_pi",
+    "location": "Casa Principal",
+    "room": "Salón",
+    "isNightMode": false,
+    "capabilities": {
+      "hasAudio": "true",
+      "hasGPIO": "true",
+      "hasLEDs": "true",
+      "platform": "Linux"
+    }
+  }
+}
+```
 
-- **Imagen base:** *Deep Learning VM* PyTorch 2.4 CUDA 12.4 (Debian 11)
-- **Drivers NVIDIA:** instalados automáticamente (`install-nvidia-driver=True`).
-- **IP externa:** `34.61.242.82` (puertos 22, 8080, 6006 abiertos).
-- **Etiquetas:** `deeplearning-vm`.
+#### ChatResponse (Servidor → Raspberry Pi)
+```json
+{
+  "success": true,
+  "message": "¿En qué habitación quieres que encienda la luz?",
+  "sessionId": "uuid-generado",
+  "audioUrl": "http://servidor/audio/response.wav",
+  "ttsService": "f5_tts",
+  "conversationState": "slot_filling",
+  "extractedEntities": {"accion": "encender"},
+  "missingEntities": {"lugar": "habitacion"},
+  "suggestedAction": null,
+  "metadata": {}
+}
+```
 
-> 💰 **Costo aproximado:** USD 0.596 / h (`g2-standard-4` + 1 L4 GPU @ us-central1-b).
+### 5.3 Modos de operación
+
+1. **🎯 MODO CONVERSACIONAL (Recomendado)**
+   - Endpoint: `/api/assistant/chat`
+   - Funciones:
+     - Conversaciones multivuelta
+     - Slot-filling inteligente
+     - Respuestas TTS
+     - Contexto del dispositivo
+     - Gestión de sesiones
+
+2. **🔄 MODO FALLBACK**
+   - Endpoint: `/transcribe`
+   - Funciones:
+     - Transcripción directa
+     - Comandos predefinidos
+     - Sin estado de conversación
+     - Sin TTS
+
+El sistema detecta automáticamente qué servicios están disponibles y usa el mejor modo posible.
 
 ---
 
-## 6. Entorno de entrenamiento
-
-- Carpeta **`training/`** con scripts y configuración detallada.
-- Config principal: `configs/training_config.yaml` (batch_size 8, lr 1e-4, epochs 100, AMP = true, target FPR 0.5 / h).
-- Pipeline automático: `scripts/run_full_training_pipeline.sh`.
-- Datos objetivo: 2000 positivos, ≥10 000 negativos → ratio ~6:1.
-
----
-
-## 7. Próximas acciones clave
-
-1. **Generar muestras positivas** en la VM (`generate_positive_samples.py`).
-2. **Descargar dataset negativo** (`download_negative_data.py`).
-3. **Ejecutar entrenamiento** (`train_puertocho_model.py`) y validar métricas.
-4. **Exportar modelo ONNX** y **subirlo a la Raspberry Pi**.
-5. Ajustar `OPENWAKEWORD_THRESHOLD` (≈0.5-0.8) con pruebas reales.
-6. Actualizar `PROJECT_TRACKER.md` y cerrar TODOs correspondientes.
-
----
-
-## 8. Enlaces útiles
-
-- Documentación entrenamiento: `training/README.md`, `docs/FASE_5_ENTRENAMIENTO_PUERTOCHO.md`
-- openWakeWord Repo: <https://github.com/dscripka/openWakeWord>
-- Google Cloud GPUs: <https://cloud.google.com/compute/docs/gpus>
-
----
 
 > Fin del reporte. Mantener este archivo actualizado conforme avance el proyecto. 
