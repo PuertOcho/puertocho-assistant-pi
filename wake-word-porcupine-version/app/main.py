@@ -150,6 +150,8 @@ class VoiceAssistant:
         # NUEVO: Gestión de sesión conversacional
         self.session_id = None
         self.use_assistant_api = True  # Preferir API del asistente
+        # Indica si se está usando un modelo de wake word personalizado (español)
+        self.custom_keywords = False
         
         # Verificar API Keys
         self._verify_api_keys()
@@ -176,13 +178,11 @@ class VoiceAssistant:
         
         print("✅ Asistente inicializado correctamente")
         
-        # Mostrar wake words según la configuración de Porcupine
-        if hasattr(self, 'porcupine'):
-            # Determinar qué wake words están activos
-            if hasattr(self.porcupine, '_keyword_paths') and self.porcupine._keyword_paths:
-                print(f"🎯 Wake words: Hola Puertocho, Oye Puertocho (modelo personalizado)")
-            else:
-                print(f"🎯 Wake words: Hey Google, Alexa (keywords genéricos)")
+        # Mostrar wake words según la configuración real
+        if self.custom_keywords:
+            print("🎯 Wake words: Hola Puertocho, Oye Puertocho (modelo personalizado)")
+        else:
+            print("🎯 Wake words: Hey Google, Alexa (keywords genéricos)")
         
         print(f"🔴 LED Rojo (GPIO {LED_RECORD}): Escuchando")
         print(f"🟢 LED Verde (GPIO {LED_IDLE}): Listo")
@@ -290,6 +290,7 @@ class VoiceAssistant:
                     keyword_paths=[model_path],
                     model_path=spanish_model_path
                 )
+                self.custom_keywords = True  # Confirmamos uso de modelo personalizado
                 print(f"✅ Porcupine inicializado con modelo personalizado en español: {model_path}")
                 return
                 
@@ -303,6 +304,7 @@ class VoiceAssistant:
                     access_key=PORCUPINE_ACCESS_KEY,
                     keyword_paths=[model_path]
                 )
+                self.custom_keywords = True  # Modelo personalizado por defecto
                 print(f"✅ Porcupine inicializado con modelo por defecto: {model_path}")
                 return
             except Exception as e:
@@ -315,6 +317,7 @@ class VoiceAssistant:
                     access_key=PORCUPINE_ACCESS_KEY,
                     keywords=['hey google', 'alexa']  # Keywords genéricos
                 )
+                self.custom_keywords = False  # Usando keywords genéricos
                 print("✅ Porcupine inicializado con keywords genéricos (hey google, alexa)")
                 print("💡 NOTA: Usar 'Hey Google' o 'Alexa' para activar el asistente")
                 return
@@ -780,7 +783,7 @@ class VoiceAssistant:
                 callback=self._audio_callback
             ):
                 # Mostrar mensaje apropiado según la configuración
-                if hasattr(self.porcupine, '_keyword_paths') and self.porcupine._keyword_paths:
+                if self.custom_keywords:
                     print("👂 Esperando wake word 'Hola Puertocho' o 'Oye Puertocho'...")
                 else:
                     print("👂 Esperando wake word 'Hey Google' o 'Alexa'...")
