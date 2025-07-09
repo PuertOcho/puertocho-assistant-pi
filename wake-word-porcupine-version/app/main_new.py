@@ -11,7 +11,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.config import config
-from app.utils.logging_config import setup_logging, setup_print_flush
+from app.utils.logging_config import setup_logging, setup_print_flush, get_logger
 from app.core.assistant import VoiceAssistant
 
 # Configurar logging y print
@@ -67,14 +67,8 @@ async def shutdown():
     logger.info("👋 Asistente detenido completamente")
     
     # Forzar salida si es necesario
-    # En Python 3.7+ se recomienda get_running_loop()
-    if sys.version_info >= (3, 7):
-        loop = asyncio.get_running_loop()
-    else:
-        loop = asyncio.get_event_loop()
-    
-    if loop.is_running():
-        loop.stop()
+    loop = asyncio.get_event_loop()
+    loop.stop()
 
 if __name__ == "__main__":
     try:

@@ -6,17 +6,24 @@ Ejecutar antes de iniciar el contenedor Docker
 
 import requests
 import os
+from pathlib import Path
+
+# Obtener la ruta del proyecto (directorio padre del script)
+PROJECT_ROOT = Path(__file__).parent.parent.absolute()
 
 def download_spanish_model():
     """Descargar modelo base en español para Porcupine"""
-    spanish_model_path = "app/porcupine_params_es.pv"
+    spanish_model_path = PROJECT_ROOT / "app" / "porcupine_params_es.pv"
     
-    if os.path.exists(spanish_model_path):
+    if spanish_model_path.exists():
         print(f"✅ Modelo en español ya existe: {spanish_model_path}")
         return True
         
     try:
         print("📥 Descargando modelo base en español para Porcupine...")
+        
+        # Crear directorio app si no existe
+        spanish_model_path.parent.mkdir(exist_ok=True)
         
         # URLs posibles para el modelo en español
         urls = [

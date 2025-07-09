@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  puertocho-backend:
+    build: .
+    ports:
+      - "8765:8765"
+    environment:
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./src:/app/src
+    restart: unless-stopped
+    container_name: puertocho-assistant-backend
+
+  # Para desarrollo local sin Docker
+  # puertocho-backend-dev:
+  #   image: python:3.11-slim
+  #   working_dir: /app
+  #   volumes:
+  #     - .:/app
+  #   ports:
+  #     - "8765:8765"
+  #   command: >
+  #     sh -c "pip install -r requirements.txt && 
+  #            python src/main.py"
+  #   environment:
+  #     - PYTHONUNBUFFERED=1

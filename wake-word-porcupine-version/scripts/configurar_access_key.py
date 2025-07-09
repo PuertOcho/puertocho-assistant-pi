@@ -5,13 +5,17 @@ Script para configurar Porcupine ACCESS_KEY automáticamente
 
 import os
 import re
+from pathlib import Path
+
+# Obtener la ruta del proyecto (directorio padre del script)
+PROJECT_ROOT = Path(__file__).parent.parent.absolute()
 
 def load_existing_env():
     """Cargar configuración existente desde .env si existe"""
     env_vars = {}
-    env_path = ".env"
+    env_path = PROJECT_ROOT / ".env"
     
-    if os.path.exists(env_path):
+    if env_path.exists():
         try:
             with open(env_path, 'r') as f:
                 for line in f:

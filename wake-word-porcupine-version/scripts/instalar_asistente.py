@@ -8,6 +8,10 @@ import os
 import sys
 import subprocess
 import time
+from pathlib import Path
+
+# Obtener la ruta del proyecto (directorio padre del script)
+PROJECT_ROOT = Path(__file__).parent.parent.absolute()
 
 def print_header(title):
     print(f"\n{'='*60}")
@@ -26,9 +30,15 @@ def run_script(script_name, description):
     print("-" * 50)
     
     try:
+        # Cambiar al directorio del proyecto para ejecutar
+        original_cwd = os.getcwd()
+        os.chdir(PROJECT_ROOT)
+        
         result = subprocess.run([sys.executable, script_name], 
                               capture_output=False, 
                               text=True)
+        
+        os.chdir(original_cwd)
         
         if result.returncode == 0:
             print(f"✅ {description} - COMPLETADO")

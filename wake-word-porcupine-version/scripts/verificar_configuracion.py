@@ -10,15 +10,20 @@ import requests
 import re
 import subprocess
 import sys
+from pathlib import Path
+
+# Obtener la ruta del proyecto (directorio padre del script)
+PROJECT_ROOT = Path(__file__).parent.parent.absolute()
 
 # Cargar variables de entorno desde .env si existe
 try:
     from dotenv import load_dotenv
-    if os.path.exists('.env'):
-        load_dotenv('.env')
-        print("✅ Variables cargadas desde .env")
+    env_file = PROJECT_ROOT / '.env'
+    if env_file.exists():
+        load_dotenv(env_file)
+        print(f"✅ Variables cargadas desde {env_file}")
     else:
-        print("ℹ️  No se encontró archivo .env")
+        print(f"ℹ️  No se encontró archivo .env en {env_file}")
 except ImportError:
     print("ℹ️  python-dotenv no instalado")
 

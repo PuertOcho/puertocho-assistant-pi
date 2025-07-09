@@ -7,6 +7,10 @@ Script simple para ejecutar el asistente cuando ya está configurado
 import os
 import sys
 import subprocess
+from pathlib import Path
+
+# Obtener la ruta del proyecto (directorio padre del script)
+PROJECT_ROOT = Path(__file__).parent.parent.absolute()
 
 def print_header(title):
     print(f"\n{'='*60}")
@@ -48,15 +52,24 @@ def run_foreground():
     print("="*60)
     
     try:
+        # Cambiar al directorio del proyecto
+        original_cwd = os.getcwd()
+        os.chdir(PROJECT_ROOT)
+        
         # Intentar con docker compose
         subprocess.run(["docker", "compose", "up", "--build"])
+        
+        os.chdir(original_cwd)
     except Exception as e:
         print(f"⚠️ Error con 'docker compose': {e}")
         try:
             # Fallback a docker-compose
+            os.chdir(PROJECT_ROOT)
             subprocess.run(["docker-compose", "up", "--build"])
+            os.chdir(original_cwd)
         except Exception as e:
             print(f"❌ Error con 'docker-compose': {e}")
+            os.chdir(original_cwd)
             return False
     return True
 
@@ -64,7 +77,12 @@ def run_background():
     """Ejecutar en segundo plano (background)"""
     print_header("🚀 EJECUTANDO ASISTENTE (SEGUNDO PLANO)")
     
+    # Cambiar al directorio del proyecto
+    original_cwd = os.getcwd()
+    
     try:
+        os.chdir(PROJECT_ROOT)
+        
         # Intentar con docker compose
         result = subprocess.run(["docker", "compose", "up", "-d", "--build"], 
                               capture_output=True, text=True)
