@@ -105,7 +105,8 @@ def check_files():
     
     all_files_ok = True
     for file_path, description in required_files.items():
-        exists = os.path.exists(file_path)
+        full_path = PROJECT_ROOT / file_path
+        exists = full_path.exists()
         print_check(f"{description}: {file_path}", exists)
         if not exists:
             all_files_ok = False
@@ -118,11 +119,12 @@ def check_commands():
     """Verificar archivo de comandos"""
     print_header("VERIFICACIÓN DE COMANDOS")
     
+    commands_path = PROJECT_ROOT / "app/commands.json"
     try:
-        with open("app/commands.json", "r") as f:
+        with open(commands_path, "r") as f:
             commands = json.load(f)
         
-        print_check("Archivo commands.json válido", True, f"{len(commands)} comandos encontrados")
+        print_check(f"Archivo commands.json válido ({commands_path})", True, f"{len(commands)} comandos encontrados")
         
         # Mostrar comandos
         for cmd, config in commands.items():
@@ -308,4 +310,4 @@ def main():
     return 0 if all_ok else 1
 
 if __name__ == "__main__":
-    sys.exit(main()) 
+    sys.exit(main())
