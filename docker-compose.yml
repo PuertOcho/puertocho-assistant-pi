@@ -1,0 +1,94 @@
+services:
+  # Backend API - FastAPI WebSocket Server
+  puertocho-backend:
+    build: 
+      context: ./puertocho-assistant-backend
+      dockerfile: Dockerfile
+    container_name: puertocho-assistant-backend
+    ports:
+      - "8765:8765"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - BACKEND_HOST=0.0.0.0
+      - BACKEND_PORT=8765
+      - BACKEND_LOG_LEVEL=INFO
+    volumes:
+      - ./puertocho-assistant-backend/src:/app/src
+    networks:
+      - puertocho-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8765/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Web Dashboard - Svelte Frontend
+  puertocho-web-dashboard:
+    build:
+      context: ./puertocho-assistant-web-view
+      dockerfile: Dockerfile
+    container_name: puertocho-web-dashboard
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - VITE_BACKEND_WS_URL=ws://localhost:8765/ws
+      - VITE_BACKEND_HTTP_URL=http://localhost:8765
+    networks:
+      - puertocho-network
+    depends_on:
+      - puertocho-backend
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Wake-Word Service - Porcupine
+  puertocho-assistant:
+    build:
+      context: ./wake-word-porcupine-version
+      dockerfile: Dockerfile
+    container_name: puertocho-assistant
+    privileged: true
+    network_mode: host
+    devices:
+      - "/dev/snd:/dev/snd"
+      - "/dev/gpiomem:/dev/gpiomem"
+    environment:
+      - PORCUPINE_ACCESS_KEY=${PORCUPINE_ACCESS_KEY}
+      - WAKEWORD_SERVICE_URL=http://localhost:8080
+      - WAKEWORD_THRESHOLD=0.5
+      - TRANSCRIPTION_SERVICE_URL=${TRANSCRIPTION_SERVICE_URL:-http://localhost:5000/transcribe}
+      - BUTTON_PIN=${BUTTON_PIN:-22}
+      - LED_IDLE_PIN=${LED_IDLE_PIN:-17}
+      - LED_RECORD_PIN=${LED_RECORD_PIN:-27}
+      - GPIO_ENABLED=true
+      - AUDIO_DEVICE_INDEX=${AUDIO_DEVICE_INDEX:-0}
+      - PULSE_RUNTIME_PATH=/run/user/1000/pulse
+    volumes:
+      - "/dev:/dev"
+      - "/sys:/sys"
+      - "/run/user/1000/pulse:/run/user/1000/pulse"
+      - "/var/lib/alsa:/var/lib/alsa"
+    group_add:
+      - audio
+    depends_on:
+      - puertocho-backend
+    restart: unless-stopped
+
+networks:
+  puertocho-network:
+    driver: bridge
+    name: puertocho-assistant-network
+
+# Volumes para persistencia (futuro)
+volumes:
+  puertocho-logs:
+    driver: local
+  puertocho-config:
+    driver: local

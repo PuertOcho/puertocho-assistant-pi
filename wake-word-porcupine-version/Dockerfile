@@ -1,4 +1,4 @@
-# Dockerfile (modificado)
+# Dockerfile simplificado
 FROM python:3.11-slim
 
 # Instalar dependencias del sistema necesarias para audio, GPIO y compilación
@@ -9,6 +9,7 @@ RUN apt-get update && apt-get install -y \
     libffi-dev \
     portaudio19-dev \
     python3-dev \
+    alsa-utils \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

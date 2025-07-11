@@ -5,11 +5,18 @@ Cliente para comunicación con el backend del asistente PuertoCho.
 import asyncio
 import json
 import logging
-import websockets
 from typing import Optional, Callable, Dict, Any
 from urllib.parse import urlparse
 
-from ..utils.logging_config import get_logger
+# Import websockets with fallback
+try:
+    import websockets
+    WEBSOCKETS_AVAILABLE = True
+except ImportError:
+    WEBSOCKETS_AVAILABLE = False
+    print("⚠️ websockets no disponible - funcionalidad WebSocket deshabilitada")
+
+from utils.logging_config import get_logger
 
 logger = get_logger('backend_client')
 
@@ -18,7 +25,7 @@ class BackendClient:
     
     def __init__(self, websocket_url: str):
         self.websocket_url = websocket_url
-        self.websocket: Optional[websockets.WebSocketServerProtocol] = None
+        self.websocket = None
         self.is_connected = False
         self.connection_task: Optional[asyncio.Task] = None
         
@@ -26,6 +33,10 @@ class BackendClient:
         self.on_message_callback: Optional[Callable] = None
         self.on_connect_callback: Optional[Callable] = None
         self.on_disconnect_callback: Optional[Callable] = None
+        
+        # Verificar disponibilidad de websockets
+        if not WEBSOCKETS_AVAILABLE:
+            logger.warning("WebSocket no disponible - cliente deshabilitado")
     
     async def connect(self) -> bool:
         """
@@ -34,6 +45,10 @@ class BackendClient:
         Returns:
             True si la conexión fue exitosa
         """
+        if not WEBSOCKETS_AVAILABLE:
+            logger.warning("WebSocket no disponible - conexión omitida")
+            return False
+            
         try:
             logger.info(f"Conectando a backend: {self.websocket_url}")
             

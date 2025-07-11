@@ -1,15 +1,47 @@
 # 🎤 Asistente de Voz Puertocho - Raspberry Pi 4
 
-Asistente de voz activado por wake word "Hola Puertocho" u "Oye Puertocho" que puede controlar LEDs mediante comandos de voz usando **servicio de transcripción HTTP local** para convertir voz a texto.
+**🆕 VERSIÓN MODULAR**: Asistente de voz con arquitectura modular, activado por wake word "Hola Puertocho" u "Oye Puertocho" que puede controlar LEDs mediante comandos de voz usando **servicio de transcripción HTTP local** para convertir voz a texto.
 
 ## 📋 Características
 
+- ✅ **Arquitectura Modular**: Código organizado en módulos especializados
 - ✅ **Wake Word personalizado**: "Hola Puertocho" u "Oye Puertocho"  
 - ✅ **Detección de silencio**: Para terminar grabación automáticamente
 - ✅ **Control por botón**: Activación manual con GPIO 22
 - ✅ **LEDs indicadores**: Verde (listo) y Rojo (escuchando)
 - ✅ **Transcripción HTTP**: Usa servicio local de transcripción (rápido y privado)
+- ✅ **Asistente Conversacional**: Soporte para conversaciones multivuelta
 - ✅ **Ejecuta en Docker**: Fácil despliegue
+- ✅ **Código Mantenible**: Separación clara de responsabilidades
+
+## 🏗️ Arquitectura Modular
+
+```
+app/
+├── main.py                    # 🚀 Punto de entrada principal
+├── main_modular.py           # 🎯 Implementación modular
+├── config.py                 # ⚙️ Configuración centralizada
+├── core/
+│   ├── __init__.py
+│   └── assistant.py          # 🧠 Lógica principal del asistente
+├── api/
+│   ├── __init__.py
+│   └── client.py             # 🌐 Cliente para comunicación backend
+├── utils/
+│   ├── __init__.py
+│   └── logging_config.py     # 📝 Configuración de logging
+├── commands.json             # 🎮 Comandos disponibles
+├── requirements.txt          # 📦 Dependencias
+└── ...
+```
+
+### 🎯 Beneficios de la Arquitectura Modular
+
+- **✅ Código Mantenible**: Archivos pequeños y especializados
+- **✅ Extensibilidad**: Fácil agregar nuevas funcionalidades
+- **✅ Testing**: Cada módulo se puede probar independientemente
+- **✅ Debugging**: Errores localizados y trazables
+- **✅ Separación de Responsabilidades**: Cada módulo tiene una función específica
 
 ## 🔧 Hardware requerido
 
@@ -269,35 +301,42 @@ El asistente se ejecuta en **segundo plano** por defecto:
 ## 📁 Estructura del proyecto
 
 ```
-assistant/
+wake-word-porcupine-version/
 ├── app/
-│   ├── main.py                           # Código principal
-│   ├── commands.json                     # Comandos disponibles
-│   ├── requirements.txt                  # Dependencias Python
-│   ├── LICENSE.txt                      # Licencia Porcupine
+│   ├── main.py                           # 🚀 Punto de entrada principal
+│   ├── main_modular.py                   # 🎯 Implementación modular
+│   ├── config.py                         # ⚙️ Configuración centralizada
+│   ├── core/
+│   │   ├── __init__.py
+│   │   └── assistant.py                  # 🧠 Lógica principal del asistente
+│   ├── api/
+│   │   ├── __init__.py
+│   │   └── client.py                     # 🌐 Cliente para comunicación backend
+│   ├── utils/
+│   │   ├── __init__.py
+│   │   └── logging_config.py             # 📝 Configuración de logging
+│   ├── commands.json                     # 🎮 Comandos disponibles
+│   ├── requirements.txt                  # 📦 Dependencias Python
+│   ├── LICENSE.txt                       # Licencia Porcupine
 │   ├── Puerto-ocho_es_raspberry-pi_v3_0_0.ppn  # Modelo wake word personalizado
-│   └── porcupine_params_es.pv           # Modelo base en español (descargado)
-├── .env                                 # 🔑 CONFIGURACIÓN PERSONAL (crear desde env.example)
-├── env.example                          # Plantilla de configuración
-├── docker-compose.yml                   # Configuración Docker
-├── Dockerfile                          # Imagen Docker
-├── instalar_asistente.py               # 🚀 INSTALADOR AUTOMÁTICO
-├── ejecutar_asistente.py               # 🎮 GESTOR DEL ASISTENTE
-├── configurar_access_key.py            # Script configuración API Keys
-├── descargar_modelo_espanol.py         # Script descarga modelo español
-├── verificar_configuracion.py          # Script de verificación
-├── CONFIGURACION_ENV.md                # 🔑 Guía configuración .env
-├── INICIO_RAPIDO.md                    # Guía de inicio rápido
-└── README.md                          # Documentación completa
+│   └── porcupine_params_es.pv            # Modelo base en español (descargado)
+├── .env                                  # 🔑 CONFIGURACIÓN PERSONAL (crear desde env.example)
+├── env.example                           # Plantilla de configuración
+├── docker-compose.yml                    # Configuración Docker
+├── Dockerfile                            # Imagen Docker
+├── migrate_to_modular.py                 # 🔄 Script de migración (opcional)
+├── README_MODULAR.md                     # � Documentación arquitectura modular
+└── README.md                             # Documentación completa
 ```
 
-### 🎯 Scripts principales
+### 🎯 Módulos Principales
 
-- **`instalar_asistente.py`** - Instalador automático completo
-- **`ejecutar_asistente.py`** - Gestor para ejecutar/detener/monitorear
-- **`configurar_access_key.py`** - Configurar API Keys
-- **`descargar_modelo_espanol.py`** - Descargar modelo español
-- **`verificar_configuracion.py`** - Verificar configuración
+- **`core/assistant.py`** - Lógica principal del asistente de voz
+- **`api/client.py`** - Cliente para comunicación con backend WebSocket
+- **`utils/logging_config.py`** - Configuración de logging estructurado
+- **`config.py`** - Configuración centralizada y detección automática
+- **`main_modular.py`** - Orquestador principal de la aplicación
+- **`main.py`** - Punto de entrada que ejecuta la versión modular
 
 ### 📋 Prerequisitos
 

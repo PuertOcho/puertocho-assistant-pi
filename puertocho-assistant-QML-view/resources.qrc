@@ -1,7 +1,0 @@
-<RCC>
-    <qresource prefix="/">
-        <file>main.qml</file>
-        <file>SystemGauge.qml</file>
-        <file>StatusCard.qml</file>
-    </qresource>
-</RCC> 
