@@ -55,14 +55,14 @@ El sistema se rediseña para que el Backend API actúe como un **Gateway y Orque
 *Objetivo: Implementar el patrón API Gateway y centralizar la lógica en el backend.*
 
 ### 2.1 Backend como Gateway
-- [ ] **Tarea 2.1.1**: Crear un endpoint REST en el backend (`POST /api/v1/audio/process`) que acepte un archivo de audio.
+- [x] **Tarea 2.1.1**: Crear un endpoint REST en el backend (`POST /api/v1/audio/process`) que acepte un archivo de audio.
 - [ ] **Tarea 2.1.2**: Implementar la lógica de orquestación en el backend:
   - [ ] Recibir audio del servicio de hardware.
   - [ ] Actualizar y transmitir estado a `processing` vía WebSocket.
   - [ ] Llamar a servicios externos (STT/NLU) con el audio/texto.
   - [ ] Recibir la respuesta final y registrar el comando.
   - [ ] Actualizar y transmitir estado a `idle` vía WebSocket.
-- [ ] **Tarea 2.1.3**: Crear un endpoint (`POST /api/v1/hardware/status`) para que el servicio de hardware informe su estado (ej. micrófono OK, GPIO conectado).
+- [x] **Tarea 2.1.3**: Crear un endpoint (`POST /api/v1/hardware/status`) para que el servicio de hardware informe su estado (ej. micrófono OK, GPIO conectado).
 
 ### 2.2 Simplificación del Servicio de Hardware
 - [ ] **Tarea 2.2.1**: Renombrar `wake-word-porcupine-version` a `puertocho-assistant-hardware`.

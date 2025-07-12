@@ -6,13 +6,15 @@ Backend API que actúa como intermediario entre el dashboard web
 y los servicios de wake-word del asistente PuertoCho.
 """
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import json
 import logging
 import asyncio
 from typing import Set
 import structlog
+import io
+from pathlib import Path
 
 # Configurar logging estructurado
 structlog.configure(
@@ -185,6 +187,82 @@ async def simulate_status(status: str):
     """Simular cambio de estado para testing"""
     await assistant_state.set_status(status)
     return {"message": f"Estado cambiado a: {status}"}
+
+# Nuevos endpoints para la arquitectura Gateway
+@app.post("/api/v1/audio/process")
+async def process_audio(audio: UploadFile = File(...)):
+    """
+    Procesar audio recibido del servicio de hardware.
+    Este endpoint actúa como orquestador central para el procesamiento de comandos de voz.
+    """
+    try:
+        logger.info("Procesando audio recibido", filename=audio.filename, content_type=audio.content_type)
+        
+        # Validar que el archivo es de audio
+        if not audio.content_type or not audio.content_type.startswith("audio/"):
+            raise HTTPException(status_code=400, detail="El archivo debe ser de audio")
+        
+        # Cambiar estado a processing
+        await assistant_state.set_status("processing")
+        
+        # Leer el contenido del archivo
+        audio_content = await audio.read()
+        audio_size = len(audio_content)
+        
+        logger.info("Audio recibido", size_bytes=audio_size)
+        
+        # TODO: Aquí irá la lógica de orquestación:
+        # 1. Llamar al servicio de transcripción (STT)
+        # 2. Llamar al servicio de NLU/Chat
+        # 3. Procesar la respuesta
+        
+        # Por ahora, simulamos el procesamiento
+        await asyncio.sleep(1)
+        
+        # Simular un comando procesado
+        command_text = f"Comando de audio procesado ({audio_size} bytes)"
+        await assistant_state.add_command(command_text)
+        
+        # Volver al estado idle
+        await assistant_state.set_status("idle")
+        
+        return {
+            "success": True,
+            "message": "Audio procesado exitosamente",
+            "audio_size": audio_size,
+            "command": command_text
+        }
+        
+    except Exception as e:
+        logger.error("Error procesando audio", error=str(e))
+        await assistant_state.set_status("error")
+        raise HTTPException(status_code=500, detail=f"Error procesando audio: {str(e)}")
+
+@app.post("/api/v1/hardware/status")
+async def update_hardware_status(status_data: dict):
+    """
+    Recibir actualizaciones de estado del servicio de hardware.
+    """
+    try:
+        logger.info("Estado del hardware recibido", status_data=status_data)
+        
+        # TODO: Almacenar y procesar el estado del hardware
+        # Por ahora, simplemente lo registramos
+        
+        # Broadcast del estado del hardware a los clientes conectados
+        await manager.broadcast({
+            "type": "hardware_status",
+            "payload": status_data
+        })
+        
+        return {
+            "success": True,
+            "message": "Estado del hardware actualizado"
+        }
+        
+    except Exception as e:
+        logger.error("Error actualizando estado del hardware", error=str(e))
+        raise HTTPException(status_code=500, detail=f"Error actualizando estado del hardware: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn
