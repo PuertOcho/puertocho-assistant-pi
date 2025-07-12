@@ -1,103 +1,55 @@
 # PuertoCho Assistant - Web Dashboard
 
-Dashboard web para el asistente de voz PuertoCho, desarrollado con Svelte y optimizado para Raspberry Pi.
+## Descripción General
 
-## Características
+Este proyecto es la cara visible del Asistente PuertoCho. Es un dashboard web interactivo, construido con Svelte, que permite a los usuarios visualizar el estado del asistente en tiempo real y controlar algunas de sus funciones. Su principal objetivo es proporcionar una retroalimentación visual clara y una forma de interacción manual con el sistema.
 
-- 🎛️ Dashboard en tiempo real del estado del asistente
-- 📱 Interfaz responsive para móvil y escritorio  
-- 🔌 Conexión WebSocket para actualizaciones en tiempo real
-- 🐳 Completamente dockerizado para fácil despliegue
-- ⚡ Optimizado para Raspberry Pi con arquitectura ARM
+## Arquitectura y Comunicación
 
-## Desarrollo Local
-
-### Requisitos previos
-- Node.js 18+ 
-- npm o yarn
-- Docker (opcional pero recomendado)
-
-### Instalación
-```bash
-# Instalar dependencias
-npm install
-
-# Ejecutar en modo desarrollo
-npm run dev:host
-
-# Acceder a http://localhost:3000
-```
-
-### Scripts disponibles
-```bash
-npm run dev          # Servidor de desarrollo local
-npm run dev:host     # Servidor de desarrollo accesible desde la red
-npm run build        # Construir para producción
-npm run preview      # Previsualizar build de producción
-npm run check        # Verificación de tipos TypeScript
-```
-
-## Despliegue con Docker
-
-### Desarrollo
-```bash
-# Construir y ejecutar en modo desarrollo
-docker-compose up puertocho-web-dev
-```
-
-### Producción
-```bash
-# Construir y ejecutar en modo producción
-docker-compose up puertocho-web-dashboard -d
-```
-
-### Comandos Docker individuales
-```bash
-# Construir imagen
-npm run docker:build
-
-# Ejecutar contenedor
-npm run docker:run
-```
-
-## Configuración
-
-Las siguientes variables de entorno pueden configurarse:
-
-- `VITE_BACKEND_URL`: URL del backend del asistente (default: http://localhost:8000)
-- `VITE_WEBSOCKET_URL`: URL del WebSocket (default: ws://localhost:8000/ws)
-
-## Arquitectura
+El dashboard es una aplicación de una sola página (SPA) que se comunica directamente con el **PuertoCho Assistant Backend** a través de una conexión WebSocket persistente. Esta arquitectura permite que el backend empuje actualizaciones de estado al dashboard instantáneamente, sin que el cliente necesite preguntar (polling).
 
 ```
-┌─────────────────────────────────────────┐
-│           Raspberry Pi                  │
-│                                         │
-│  ┌─────────────────┐ ┌─────────────────┐│
-│  │   Backend       │ │   Frontend      ││
-│  │   Python        │ │   Svelte        ││
-│  │   + FastAPI     │ │   + nginx       ││
-│  │   Puerto: 8000  │ │   Puerto: 3000  ││
-│  └─────────────────┘ └─────────────────┘│
-│           │                   │          │
-│           └───── WebSocket ───┘          │
-└─────────────────────────────────────────┘
+Dashboard Web (Svelte) ←───── WebSocket (ws://.../ws) ─────→ Backend API
+(Este proyecto)
 ```
 
-## Estructura del Proyecto
+El flujo de comunicación es el siguiente:
+1.  Al cargar la aplicación en el navegador, el servicio `websocketService.ts` establece una conexión con el endpoint `ws://localhost:8765/ws` del backend.
+2.  El dashboard se suscribe a los mensajes del backend para actualizar la interfaz de usuario.
+3.  Cuando el usuario realiza una acción, como presionar el botón de "Activación Manual", el dashboard envía un mensaje JSON específico al backend.
+4.  El backend procesa la solicitud y notifica a todos los clientes (incluido este) sobre cualquier cambio de estado o nuevo comando registrado.
 
+## API de Comunicación (WebSocket)
+
+La comunicación se basa en un intercambio de mensajes JSON tipados.
+
+### Mensajes que el Dashboard Escucha (del Backend)
+
+Estos mensajes actualizan la UI en tiempo real.
+
+```json
+{
+  "type": "status_update",
+  "payload": { "status": "idle|listening|processing|error" }
+}
 ```
-src/
-├── lib/           # Componentes reutilizables
-├── routes/        # Páginas de la aplicación
-└── app.html       # Template HTML principal
+- **Reacción**: Al recibir este mensaje, el `assistantStore` se actualiza, y los componentes de Svelte que dependen de él (como el `StatusIndicator.svelte`) cambian su apariencia visual para reflejar el nuevo estado.
 
-static/            # Archivos estáticos
-docker-compose.yml # Configuración Docker
-Dockerfile         # Imagen Docker para producción
-nginx.conf         # Configuración del servidor web
+```json
+{
+  "type": "command_log",
+  "payload": { "command": "...", "timestamp": "..." }
+}
 ```
+- **Reacción**: Este mensaje añade el comando recibido al historial. El componente `CommandHistory.svelte` muestra la lista actualizada de comandos.
 
-## Estado del Desarrollo
+### Mensajes que el Dashboard Envía (al Backend)
 
-Ver `PROJECT_TRACKER.md` para el estado actual de las tareas y roadmap del proyecto.
+Estos mensajes inician acciones en el asistente.
+
+```json
+{
+  "type": "manual_activation"
+}
+```
+- **Acción**: Se envía cuando el usuario hace clic en el componente `ManualActivation.svelte`, solicitando al backend que inicie el ciclo de escucha del asistente.

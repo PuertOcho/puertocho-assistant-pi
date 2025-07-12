@@ -1,383 +1,60 @@
-# 🎤 Asistente de Voz Puertocho - Raspberry Pi 4
+# Wake-Word Service (Porcupine Version)
 
-**🆕 VERSIÓN MODULAR**: Asistente de voz con arquitectura modular, activado por wake word "Hola Puertocho" u "Oye Puertocho" que puede controlar LEDs mediante comandos de voz usando **servicio de transcripción HTTP local** para convertir voz a texto.
+## Descripción General
 
-## 📋 Características
+Este servicio es el oído del Asistente PuertoCho. Su responsabilidad es escuchar constantemente en el entorno físico a través de un micrófono para detectar una palabra de activación específica ("wake word"). Una vez detectada, graba el comando de voz del usuario y lo delega a otros servicios para su procesamiento. Interactúa directamente con el hardware de la Raspberry Pi para controlar LEDs de estado y leer un botón de activación manual.
 
-- ✅ **Arquitectura Modular**: Código organizado en módulos especializados
-- ✅ **Wake Word personalizado**: "Hola Puertocho" u "Oye Puertocho"  
-- ✅ **Detección de silencio**: Para terminar grabación automáticamente
-- ✅ **Control por botón**: Activación manual con GPIO 22
-- ✅ **LEDs indicadores**: Verde (listo) y Rojo (escuchando)
-- ✅ **Transcripción HTTP**: Usa servicio local de transcripción (rápido y privado)
-- ✅ **Asistente Conversacional**: Soporte para conversaciones multivuelta
-- ✅ **Ejecuta en Docker**: Fácil despliegue
-- ✅ **Código Mantenible**: Separación clara de responsabilidades
+## Arquitectura y Funcionamiento
 
-## 🏗️ Arquitectura Modular
+El servicio opera en un bucle continuo con los siguientes pasos:
+
+1.  **Inicialización**: Carga la configuración, incluyendo las URLs de los servicios externos y las claves de API para el motor de wake word (Porcupine). Inicializa los pines GPIO para los LEDs (estado "preparado" y "escuchando") y el botón de activación manual.
+2.  **Detección de Wake Word**: Entra en un estado de escucha activa (`idle`), procesando el audio del micrófono en tiempo real con Porcupine. El LED de estado "preparado" (verde) permanece encendido.
+3.  **Activación**: Al detectar la palabra clave ("Hola Puertocho" o "Oye Puertocho") o al recibir una pulsación del botón físico, el servicio transiciona:
+    *   Cambia su estado interno a `listening`.
+    *   Apaga el LED "preparado" y enciende el LED "escuchando" (rojo).
+4.  **Grabación del Comando**: Graba el audio del usuario hasta que detecta un periodo de silencio. Utiliza `webrtcvad` (Voice Activity Detection) para determinar de forma inteligente el final del habla del usuario.
+5.  **Delegación del Comando**: Una vez finalizada la grabación, cambia su estado a `processing`. El audio grabado se encapsula en un archivo `.wav` y se envía a un servicio externo para su interpretación.
+6.  **Vuelta al Estado Inicial**: Tras completar el ciclo, vuelve a su estado `idle` para esperar la siguiente palabra de activación.
+
+## Comunicación con Otros Servicios
+
+Este servicio no procesa el lenguaje natural directamente; su función es actuar como un sensor de voz y delegar esa tarea. La comunicación se realiza a través de **peticiones HTTP POST**.
+
+El servicio tiene dos modos de operación, que se seleccionan automáticamente al inicio dependiendo de los servicios que encuentre disponibles en la red:
+
+### Modo 1: Conversacional (Preferido)
+
+Este modo se activa si el **Servicio de Chat del Asistente** está disponible.
+
+*   **Endpoint de destino**: `ASSISTANT_CHAT_URL` (configurable).
+*   **Flujo de comunicación**:
+    1.  Primero, envía el audio grabado al **Servicio de Transcripción** para convertir la voz a texto.
+    2.  Luego, envía el texto ya transcrito al **Servicio de Chat del Asistente**.
+    3.  Este modo permite conversaciones contextuales y respuestas complejas. Si el servicio de chat devuelve una URL de audio con una respuesta sintetizada (TTS), este servicio de wake-word se encarga de descargarla y reproducirla.
 
 ```
-app/
-├── main.py                    # 🚀 Punto de entrada principal
-├── main_modular.py           # 🎯 Implementación modular
-├── config.py                 # ⚙️ Configuración centralizada
-├── core/
-│   ├── __init__.py
-│   └── assistant.py          # 🧠 Lógica principal del asistente
-├── api/
-│   ├── __init__.py
-│   └── client.py             # 🌐 Cliente para comunicación backend
-├── utils/
-│   ├── __init__.py
-│   └── logging_config.py     # 📝 Configuración de logging
-├── commands.json             # 🎮 Comandos disponibles
-├── requirements.txt          # 📦 Dependencias
-└── ...
+┌───────────────────────────┐      ┌───────────────────────────┐      ┌────────────────────────┐
+│ Wake-Word Service         │      │ Transcription Service     │      │ Assistant Chat Service │
+│ (Este proyecto)           │      │ (Externo)                 │      │ (Externo)              │
+├───────────────────────────┤      ├───────────────────────────┤      ├────────────────────────┤
+│ 1. Graba audio            │      │                           │      │                        │
+│ 2. Envía audio.wav        ├─────►│ 3. Transcribe a texto     │      │                        │
+│                           │      │ 4. Devuelve texto         │◄─────┤                        │
+│ 5. Recibe texto           │      │                           │      │                        │
+│ 6. Envía texto            │      │                           ├─────►│ 7. Procesa conversación  │
+│                           │      │                           │      │ 8. Devuelve respuesta  │
+│ 9. Recibe y reproduce     │◄─────│                           │◄─────┤                        │
+└───────────────────────────┘      └───────────────────────────┘      └────────────────────────┘
 ```
 
-### 🎯 Beneficios de la Arquitectura Modular
-
-- **✅ Código Mantenible**: Archivos pequeños y especializados
-- **✅ Extensibilidad**: Fácil agregar nuevas funcionalidades
-- **✅ Testing**: Cada módulo se puede probar independientemente
-- **✅ Debugging**: Errores localizados y trazables
-- **✅ Separación de Responsabilidades**: Cada módulo tiene una función específica
-
-## 🔧 Hardware requerido
-
-- Raspberry Pi 4
-- Micrófono (conexión jack)
-- LED Verde conectado a GPIO 17
-- LED Rojo conectado a GPIO 27  
-- Botón conectado a GPIO 22
-- Resistencias apropiadas para LEDs
-
-## ⚙️ Configuración previa
-
-> 🆕 **NUEVO**: Ahora usamos archivo `.env` para una configuración más sencilla y segura. Ver [CONFIGURACION_ENV.md](CONFIGURACION_ENV.md) para detalles.
-
-### 1. Requisitos
-
-**🎯 Porcupine ACCESS_KEY (para wake word):**
-
-**📱 MÉTODO FÁCIL (Recomendado):**
-```bash
-python3 configurar_access_key.py
-```
-
-Este script es inteligente y:
-1. 🔍 **Verifica** si ya tienes configuración válida
-2. ❓ **Te pregunta** si quieres mantenerla o cambiarla
-3. 🔑 **Solo pide** nueva clave si es necesario
-4. 💾 **Preserva** otras configuraciones existentes
-
-**⚙️ MÉTODO MANUAL:**
-
-1. Ve a [Picovoice Console](https://console.picovoice.ai/)
-2. Crea una cuenta gratuita
-3. En el dashboard, copia tu **AccessKey**
-4. Crea un archivo `.env` en la raíz del proyecto:
-
-```bash
-cp env.example .env
-nano .env
-```
-
-Completa con tu ACCESS_KEY:
-```env
-PORCUPINE_ACCESS_KEY=tu_access_key_real_aqui
-ASSISTANT_CHAT_URL=http://192.168.1.88:8080/api/assistant/chat
-TRANSCRIPTION_SERVICE_URL=http://192.168.1.88:5000/transcribe
-BUTTON_PIN=22
-LED_IDLE_PIN=17
-LED_RECORD_PIN=27
-```
-
-**🤖 Servicios requeridos:**
-
-El asistente puede funcionar en dos modos:
-
-1. **🎯 MODO CONVERSACIONAL (Recomendado)**: Usa el asistente completo con conversaciones multivuelta
-   - Endpoint: `http://192.168.1.88:8080/api/assistant/chat`
-   - Funciones: Slot-filling, conversaciones multivuelta, respuestas inteligentes
-   - Variable: `ASSISTANT_CHAT_URL`
-
-2. **🔄 MODO FALLBACK**: Usa transcripción directa + comandos locales  
-   - Endpoint: `http://192.168.1.88:5000/transcribe`
-   - Funciones: Solo comandos predefinidos en `commands.json`
-   - Variable: `TRANSCRIPTION_SERVICE_URL`
-
-El asistente detecta automáticamente qué servicios están disponibles y usa el mejor modo posible.
-
-## 🚀 Instalación y uso
-
-### 🎯 Opción 1: INSTALACIÓN AUTOMÁTICA (Recomendado)
-
-**¡Todo en un solo comando!**
-```bash
-python3 instalar_asistente.py
-```
-
-Este script automatiza **todo el proceso**:
-1. ✅ Configurar API Keys (Porcupine)
-2. ✅ Descargar modelo en español
-3. ✅ Verificar configuración  
-4. ✅ Ejecutar asistente **en segundo plano**
-5. ✅ Mostrar logs en tiempo real (opcional)
-
-**⏱️ Tiempo: 3-5 minutos**
-
----
-
-### 🔧 Opción 2: INSTALACIÓN MANUAL (Paso a paso)
-
-#### 1. Clonar y configurar
-
-```bash
-git clone <tu-repo>
-cd assistant
-```
-
-#### 2. Configurar API Keys
-
-```bash
-python3 configurar_access_key.py
-```
-
-#### 3. Descargar modelo en español (Recomendado)
-
-```bash
-python3 descargar_modelo_espanol.py
-```
-
-Este paso descarga el modelo base en español para que puedas usar tu wake word personalizado "Hola Puertocho" u "Oye Puertocho".
-
-**Si no ejecutas este paso:** El asistente funcionará, pero usará wake words genéricos como "Hey Google" o "Alexa".
-
-#### 4. Verificar configuración
-
-```bash
-python3 verificar_configuracion.py
-```
-
-#### 5. Ejecutar con Docker
-
-```bash
-# Construir y ejecutar (nueva sintaxis)
-docker compose up --build
-
-# Si tienes docker-compose antiguo
-docker-compose up --build
-
-# Ejecutar en background
-docker compose up -d --build
-```
-
----
-
-### 🎮 Gestión del Asistente (cuando ya está configurado)
-
-#### 🚀 Ejecutor Rápido
-```bash
-python3 ejecutar_asistente.py
-```
-
-**Opciones del menú interactivo:**
-1. Ejecutar asistente (primer plano)
-2. Ejecutar asistente (segundo plano) 
-3. Ver estado del asistente
-4. Ver logs en tiempo real
-5. Detener asistente
-
-**Opciones por línea de comandos:**
-```bash
-python3 ejecutar_asistente.py run      # Primer plano
-python3 ejecutar_asistente.py start    # Segundo plano
-python3 ejecutar_asistente.py stop     # Detener
-python3 ejecutar_asistente.py status   # Ver estado
-python3 ejecutar_asistente.py logs     # Ver logs
-```
-
-#### 6. Ver logs
-
-```bash
-python3 ejecutar_asistente.py logs
-# o manualmente:
-docker compose logs -f puertocho-assistant
-```
-
-## 🎯 Wake Words disponibles
-
-### ✅ Con modelo en español (Recomendado)
-Si ejecutaste `python3 descargar_modelo_espanol.py`:
-- **"Hola Puertocho"**
-- **"Oye Puertocho"**
-
-### 🔄 Fallback (keywords genéricos)
-Si no se puede usar el modelo en español:
-- **"Hey Google"**
-- **"Alexa"**
-
-El asistente te indicará qué wake words está usando al iniciar.
-
-## 🎯 Comandos disponibles
-
-Los comandos están definidos en `app/commands.json`:
-
-```json
-{
-  "enciende luz verde": { "pin": 17, "state": "on" },
-  "apaga luz verde": { "pin": 17, "state": "off" },
-  "enciende luz rojo": { "pin": 27, "state": "on" },
-  "apaga luz rojo": { "pin": 27, "state": "off" }
-}
-```
-
-## 💡 Cómo usar
-
-1. **Wake Word**: Di "Hola Puertocho" u "Oye Puertocho"
-2. **LED Verde** se apaga, **LED Rojo** se enciende
-3. **Habla tu comando**: "enciende luz verde"
-4. **Detección automática** de fin de comando por silencio
-5. **Comando ejecutado** y vuelta al estado de espera
-
-### Activación manual
-- Presiona el **botón** (GPIO 22) para activar sin wake word
-- Presiona nuevamente durante grabación para **cancelar**
-
-## 🔧 Solución de problemas
-
-### Error: "Necesitas configurar API Keys"
-```bash
-python3 configurar_access_key.py
-```
-
-### Error: "Failed to add edge detection" o "This channel is already in use"
-✅ **CORREGIDO**: El nuevo código maneja estos errores automáticamente con:
-- Cleanup inicial de GPIO
-- Monitoreo por polling en lugar de interrupciones
-- Manejo robusto de errores
-
-### Error: "Keyword file (.ppn) and model file (.pv) should belong to the same language"
-✅ **CORREGIDO**: El código ahora usa el modelo en español para Porcupine automáticamente
-
-### Error de conexión con servicios
-- **Modo conversacional**: Verifica que el asistente esté en `http://192.168.1.88:8080/api/assistant/chat`
-- **Modo fallback**: Verifica que la transcripción esté en `http://192.168.1.88:5000/transcribe`
-- Revisa que los servicios respondan correctamente
-- Ejecuta `python3 verificar_configuracion.py` para diagnosticar
-
-### Problemas de audio
-- Verifica que el micrófono esté conectado correctamente
-- Revisa permisos de Docker para acceder a `/dev/snd`
-
-### LEDs no funcionan
-- Verifica conexiones de hardware en GPIOs 17 y 27
-- Asegúrate que Docker tenga acceso a GPIO con `privileged: true`
-
-## 💰 Ventajas del sistema
-
-### 🎯 Modo Conversacional (Recomendado)
-- **🧠 Inteligente**: Conversaciones multivuelta con slot-filling
-- **🔄 Contextual**: Recuerda el contexto de la conversación
-- **🎤 TTS integrado**: Respuestas con audio sintetizado
-- **🛠️ Extensible**: Fácil agregar nuevas herramientas
-
-### 🔄 Modo Fallback
-- **⚡ Rápido**: Respuesta inmediata para comandos simples
-- **🏠 Local**: Sin dependencias externas
-- **🔒 Privado**: Tu audio no sale de tu red local
-- **💰 Gratuito**: Sin costos por uso de APIs
-
-## 🚀 Modo segundo plano (Background)
-
-El asistente se ejecuta en **segundo plano** por defecto:
-- **🔄 Persistente**: Sigue funcionando aunque cierres la terminal
-- **📋 Logs controlados**: Ve logs cuando quieras con `docker compose logs -f`
-- **⚡ No bloquea**: Tu terminal queda libre para otros comandos
-- **🎮 Control total**: Detener/reiniciar sin interrumpir otras tareas
-- **📊 Monitoreo**: Verificar estado en cualquier momento
-
-## 📁 Estructura del proyecto
-
-```
-wake-word-porcupine-version/
-├── app/
-│   ├── main.py                           # 🚀 Punto de entrada principal
-│   ├── main_modular.py                   # 🎯 Implementación modular
-│   ├── config.py                         # ⚙️ Configuración centralizada
-│   ├── core/
-│   │   ├── __init__.py
-│   │   └── assistant.py                  # 🧠 Lógica principal del asistente
-│   ├── api/
-│   │   ├── __init__.py
-│   │   └── client.py                     # 🌐 Cliente para comunicación backend
-│   ├── utils/
-│   │   ├── __init__.py
-│   │   └── logging_config.py             # 📝 Configuración de logging
-│   ├── commands.json                     # 🎮 Comandos disponibles
-│   ├── requirements.txt                  # 📦 Dependencias Python
-│   ├── LICENSE.txt                       # Licencia Porcupine
-│   ├── Puerto-ocho_es_raspberry-pi_v3_0_0.ppn  # Modelo wake word personalizado
-│   └── porcupine_params_es.pv            # Modelo base en español (descargado)
-├── .env                                  # 🔑 CONFIGURACIÓN PERSONAL (crear desde env.example)
-├── env.example                           # Plantilla de configuración
-├── docker-compose.yml                    # Configuración Docker
-├── Dockerfile                            # Imagen Docker
-├── migrate_to_modular.py                 # 🔄 Script de migración (opcional)
-├── README_MODULAR.md                     # � Documentación arquitectura modular
-└── README.md                             # Documentación completa
-```
-
-### 🎯 Módulos Principales
-
-- **`core/assistant.py`** - Lógica principal del asistente de voz
-- **`api/client.py`** - Cliente para comunicación con backend WebSocket
-- **`utils/logging_config.py`** - Configuración de logging estructurado
-- **`config.py`** - Configuración centralizada y detección automática
-- **`main_modular.py`** - Orquestador principal de la aplicación
-- **`main.py`** - Punto de entrada que ejecuta la versión modular
-
-### 📋 Prerequisitos
-
-**Asegúrate de tener el servicio de transcripción ejecutándose antes de iniciar el asistente:**
-
-```bash
-# El servicio debe estar disponible en:
-curl -X POST http://localhost:5000/transcribe \
-  -F "audio=@archivo.wav"
-
-# Respuesta esperada:
-{"transcription": "texto transcrito"}
-```
-
-## 🔄 Personalización
-
-### Agregar nuevos comandos
-
-Edita `app/commands.json`:
-
-```json
-{
-  "tu nuevo comando": { "pin": 18, "state": "on" }
-}
-```
-
-### Cambiar GPIOs
-
-Edita `docker-compose.yml`:
-
-```yaml
-environment:
-  - BUTTON_PIN=22        # GPIO del botón
-  - LED_IDLE_PIN=17      # GPIO LED verde  
-  - LED_RECORD_PIN=27    # GPIO LED rojo
-```
-
-## 📞 Soporte
-
-Si tienes problemas:
-1. Ejecuta: `python3 verificar_configuracion.py`
-2. Revisa los logs: `docker compose logs -f`
-3. Verifica la configuración de hardware
-4. Asegúrate que tengas créditos en OpenAI 
+### Modo 2: Fallback (Comandos Locales)
+
+Este modo se activa si el servicio de chat no está disponible, pero sí el de transcripción.
+
+*   **Endpoint de destino**: `TRANSCRIPTION_SERVICE_URL` (configurable).
+*   **Flujo de comunicación**:
+    1.  Envía el audio grabado directamente al **Servicio de Transcripción**.
+    2.  Recibe el texto transcrito y busca una coincidencia exacta en su archivo local `commands.json`.
+    3.  Si encuentra una coincidencia, ejecuta la acción asociada (ej. encender/apagar un LED conectado a un pin GPIO).
+*   Este modo es más limitado, no tiene memoria conversacional y solo responde a un conjunto predefinido de comandos.
