@@ -1,10 +1,14 @@
-# Dockerfile simplificado
-FROM python:3.11-slim
+# Dockerfile simplificado - usando imagen base completa
+FROM python:3.11
+
+# Configurar variables de entorno
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PIP_NO_CACHE_DIR=1
+ENV PYTHONUNBUFFERED=1
 
 # Instalar dependencias del sistema necesarias para audio, GPIO y compilación
+# La imagen python:3.11 ya tiene build-essential, gcc, etc.
 RUN apt-get update && apt-get install -y \
-    build-essential \
-    gcc \
     libasound2-dev \
     libffi-dev \
     portaudio19-dev \
@@ -14,11 +18,9 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 COPY app/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
+    pip install --no-cache-dir --prefer-binary -r requirements.txt
 
 COPY app /app
-
-# Desactivar buffering de Python para logs en tiempo real
-ENV PYTHONUNBUFFERED=1
 
 CMD ["python", "-u", "main.py"]
