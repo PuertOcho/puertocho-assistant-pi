@@ -45,24 +45,36 @@ class Config:
         # Configuración de Porcupine
         self.porcupine_access_key = os.getenv('PORCUPINE_ACCESS_KEY')
         
-        # URLs de servicios
-        self.assistant_chat_url = os.getenv(
-            'ASSISTANT_CHAT_URL', 
-            'http://192.168.1.88:8080/api/assistant/chat'
+        # URLs de servicios - Solo backend
+        self.backend_url = os.getenv(
+            'BACKEND_URL', 
+            'http://localhost:8000'
         )
-        self.transcription_service_url = os.getenv(
-            'TRANSCRIPTION_SERVICE_URL', 
-            'http://192.168.1.88:5000/transcribe'
-        )
-        self.backend_websocket_url = os.getenv(
-            'BACKEND_WEBSOCKET_URL',
-            'ws://localhost:8765/ws'
-        )
+        self.backend_audio_endpoint = f"{self.backend_url}/api/v1/audio/process"
+        self.backend_hardware_status_endpoint = f"{self.backend_url}/api/v1/hardware/status"
         
-        # Configuración de GPIO
-        self.button_pin = int(os.getenv('BUTTON_PIN', 22))
-        self.led_idle_pin = int(os.getenv('LED_IDLE_PIN', 17))
-        self.led_record_pin = int(os.getenv('LED_RECORD_PIN', 27))
+        # Configuración de GPIO - ReSpeaker 2-Mic Pi HAT V1.0
+        # Pines ocupados por el módulo:
+        # - Audio: WM8960 codec (I2S)
+        # - RGB LEDs: 3 APA102 RGB LEDs (SPI)
+        # - Botón: GPIO17 (por defecto en el módulo)
+        # - Micrófonos: Mic L y Mic R (estéreo)
+        
+        # Pines disponibles para expansión:
+        # - Grove I2C: GPIO2 (SDA), GPIO3 (SCL) 
+        # - Grove GPIO12: GPIO12 y GPIO13
+        
+        # Configuración del botón integrado del módulo
+        self.button_pin = int(os.getenv('BUTTON_PIN', 17))  # Botón integrado del ReSpeaker
+        
+        # LEDs externos opcionales (no usar los APA102 del módulo por ahora)
+        # Estos pueden conectarse a los pines Grove disponibles
+        self.led_idle_pin = int(os.getenv('LED_IDLE_PIN', 12))    # Grove GPIO12
+        self.led_record_pin = int(os.getenv('LED_RECORD_PIN', 13))  # Grove GPIO13
+        
+        # Configuración I2C para expansiones futuras
+        self.i2c_sda_pin = 2  # Grove I2C SDA
+        self.i2c_scl_pin = 3  # Grove I2C SCL
         
         # Configuración de audio
         self.porcupine_rate = 16000
@@ -116,11 +128,19 @@ class Config:
                 except ValueError:
                     pass
             
-            # Si no hay variable de entorno o no funciona, buscar automáticamente
+            # Si no hay variable de entorno, buscar automáticamente
             devices = sd.query_devices()
             print("🔍 Detectando dispositivos de audio...")
             
-            # Buscar dispositivos con entrada (micrófonos)
+            # Buscar específicamente el ReSpeaker (seeed-voicecard)
+            for i, device in enumerate(devices):
+                if device['max_input_channels'] > 0:
+                    device_name = device['name'].lower()
+                    if 'seeed' in device_name or 'voicecard' in device_name or 'respeaker' in device_name:
+                        print(f"✅ ReSpeaker detectado: {i} - {device['name']}")
+                        return i
+            
+            # Si no se encuentra ReSpeaker, buscar dispositivos con entrada
             input_devices = []
             for i, device in enumerate(devices):
                 if device['max_input_channels'] > 0:
@@ -131,8 +151,7 @@ class Config:
                 print("⚠️ No se encontraron dispositivos de entrada, usando default")
                 return None  # Usar default
             
-            # En lugar de probar cada dispositivo, usar el primero disponible
-            # Esto evita conflictos de acceso al dispositivo
+            # Usar el primer dispositivo disponible
             device_index, device = input_devices[0]
             print(f"✅ Usando primer dispositivo disponible: {device_index} - {device['name']}")
             return device_index
@@ -255,15 +274,41 @@ class Config:
             print(f"❌ Validación fallida: {e}")
             return False
     
-    def get_assistant_endpoint(self) -> str:
-        """Obtener endpoint del asistente"""
-        return self.assistant_chat_url
+    def get_backend_endpoint(self) -> str:
+        """Obtener endpoint del backend"""
+        return self.backend_url
     
     def get_audio_config(self) -> str:
         """Obtener configuración de audio como string"""
         sample_rate = self.detect_supported_sample_rate()
         device_text = f"device {self.audio_device_index}" if self.audio_device_index is not None else "default device"
-        return f"{sample_rate} Hz ({device_text})"
+        
+        # Detectar si es ReSpeaker
+        respeaker_info = self.detect_respeaker()
+        if respeaker_info:
+            return f"{sample_rate} Hz (ReSpeaker {respeaker_info} - device {self.audio_device_index})"
+        else:
+            return f"{sample_rate} Hz ({device_text})"
+    
+    def detect_respeaker(self) -> Optional[str]:
+        """Detectar si hay un módulo ReSpeaker conectado"""
+        try:
+            import sounddevice as sd
+            devices = sd.query_devices()
+            
+            for device in devices:
+                device_name = device['name'].lower()
+                if 'seeed' in device_name or 'voicecard' in device_name:
+                    return "2-Mic Pi HAT V1.0"
+                elif 'respeaker' in device_name:
+                    return "detected"
+            
+            return None
+            
+        except ImportError:
+            return None
+        except Exception:
+            return None
 
 # Instancia global de configuración
 config = Config()

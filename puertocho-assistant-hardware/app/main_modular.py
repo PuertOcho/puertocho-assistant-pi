@@ -20,7 +20,7 @@ logging.basicConfig(
 )
 
 # Importaciones de módulos locales
-from core.assistant import VoiceAssistant
+from core.hardware_client import HardwareClient
 from utils.logging_config import get_logger
 from config import Config
 
@@ -31,7 +31,7 @@ class PuertoChoApp:
     
     def __init__(self):
         self.config = Config()
-        self.assistant: Optional[VoiceAssistant] = None
+        self.hardware_client: Optional[HardwareClient] = None
         self.running = False
         
     def setup_signal_handlers(self):
@@ -53,38 +53,38 @@ class PuertoChoApp:
                 logger.error("❌ Configuración inválida")
                 return False
             
-            # Crear y configurar el asistente
-            self.assistant = VoiceAssistant(self.config)
+            # Crear y configurar el cliente hardware
+            self.hardware_client = HardwareClient(self.config)
             
             # Configurar manejadores de señales
             self.setup_signal_handlers()
             
-            # Inicializar el asistente
-            await self.assistant.initialize()
+            # Inicializar el cliente
+            await self.hardware_client.initialize()
             
             # Mostrar información de inicio
-            logger.info("✅ Asistente inicializado correctamente")
-            logger.info(f"🎯 Wake words: {self.assistant.get_wake_words()}")
-            logger.info(f"🤖 Endpoint: {self.config.get_assistant_endpoint()}")
+            logger.info("✅ Cliente hardware inicializado correctamente")
+            logger.info(f"🎯 Wake words: {self.hardware_client.get_wake_words()}")
+            logger.info(f"🤖 Backend: {self.config.get_backend_endpoint()}")
             logger.info(f"🎵 Audio: {self.config.get_audio_config()}")
             
             # Iniciar el bucle principal
             self.running = True
-            await self.assistant.run()
+            await self.hardware_client.run()
             
             return True
             
         except Exception as e:
-            logger.error(f"❌ Error iniciando asistente: {e}")
+            logger.error(f"❌ Error iniciando cliente hardware: {e}")
             return False
     
     def stop(self):
-        """Detener el asistente"""
-        logger.info("🛑 Deteniendo asistente...")
+        """Detener el cliente"""
+        logger.info("🛑 Deteniendo cliente...")
         self.running = False
         
-        if self.assistant:
-            self.assistant.stop()
+        if self.hardware_client:
+            asyncio.create_task(self.hardware_client.stop())
     
     async def run(self):
         """Ejecutar la aplicación"""
@@ -100,8 +100,8 @@ class PuertoChoApp:
 
 def main():
     """Función principal"""
-    print("🎙️  PuertoCho Voice Assistant - Versión Modular")
-    print("=" * 50)
+    print("🎙️  PuertoCho Hardware Client - Versión Simplificada")
+    print("=" * 60)
     
     app = PuertoChoApp()
     

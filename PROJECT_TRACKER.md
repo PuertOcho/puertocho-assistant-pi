@@ -64,11 +64,49 @@ El sistema se rediseña para que el Backend API actúe como un **Gateway y Orque
   - [ ] Actualizar y transmitir estado a `idle` vía WebSocket.
 - [x] **Tarea 2.1.3**: Crear un endpoint (`POST /api/v1/hardware/status`) para que el servicio de hardware informe su estado (ej. micrófono OK, GPIO conectado).
 
-### 2.2 Simplificación del Servicio de Hardware
-- [ ] **Tarea 2.2.1**: Renombrar `wake-word-porcupine-version` a `puertocho-assistant-hardware`.
-- [ ] **Tarea 2.2.2**: Refactorizar el servicio de hardware para eliminar toda la lógica de llamadas a servicios externos (STT/NLU).
-- [ ] **Tarea 2.2.3**: Implementar un cliente HTTP para que, tras grabar el audio, lo envíe únicamente al endpoint `/api/v1/audio/process` del backend.
-- [ ] **Tarea 2.2.4**: Implementar el envío periódico o por eventos del estado del hardware al endpoint `/api/v1/hardware/status` del backend.
+### 2.2 Simplificación del Servicio de Hardware ✅ COMPLETADA
+- [x] **Tarea 2.2.1**: Renombrar `wake-word-porcupine-version` a `puertocho-assistant-hardware`.
+- [x] **Tarea 2.2.2**: Refactorizar el servicio de hardware para eliminar toda la lógica de llamadas a servicios externos (STT/NLU).
+  - [x] Crear nuevo `HardwareClient` simplificado que solo captura audio
+  - [x] Eliminar referencias a servicios de transcripción y chat
+  - [x] Simplificar configuración para solo usar backend
+- [x] **Tarea 2.2.3**: Implementar un cliente HTTP para que, tras grabar el audio, lo envíe únicamente al endpoint `/api/v1/audio/process` del backend.
+  - [x] Método `_send_audio_to_backend()` implementado en `HardwareClient`
+  - [x] Envío de archivos WAV via HTTP POST
+  - [x] Manejo de errores y timeout configurado
+- [x] **Tarea 2.2.4**: Implementar el envío periódico o por eventos del estado del hardware al endpoint `/api/v1/hardware/status` del backend.
+  - [x] Método `_send_hardware_status()` implementado 
+  - [x] Envío de estado inicial al arrancar
+  - [x] Incluye información sobre micrófono, GPIO, Porcupine, VAD
+- [x] **Tarea 2.2.5**: Configurar correctamente el hardware ReSpeaker v1 para captura de audio óptima:
+  - [x] Solucionar problemas de ALSA (instalar `libasound2-plugins`)
+  - [x] Configurar parámetros de grabación para mejor calidad: `arecord -D plughw:1,0 -f S16_LE -r 44100 -c 2 -d 5 grabacion.wav`
+  - [x] Validar reproducción de audio: `aplay test.wav`
+  - [x] Identificar configuraciones óptimas para Porcupine (16kHz, mono, S16_LE)
+
+**Resumen de cambios implementados:**
+- ✅ Servicio renombrado de `wake-word-porcupine-version` a `puertocho-assistant-hardware`
+- ✅ Código completamente refactorizado con nuevo `HardwareClient` simplificado
+- ✅ Eliminadas todas las dependencias a servicios externos (STT/NLU/Chat)
+- ✅ Implementado cliente HTTP para enviar audio al backend (`/api/v1/audio/process`)
+- ✅ Implementado envío de estado del hardware al backend (`/api/v1/hardware/status`)
+- ✅ Configuración del hardware ReSpeaker v1 documentada y validada
+- ✅ Archivo `.env.example` creado con todas las variables necesarias
+- ✅ README actualizado con la nueva arquitectura
+- ✅ **Documentación específica del módulo ReSpeaker 2-Mic Pi HAT V1.0**:
+  - ✅ Pinout detallado y pines disponibles para expansión
+  - ✅ Configuración de GPIO actualizada (Botón: GPIO17, LEDs: GPIO12/13)
+  - ✅ Detección automática del dispositivo ReSpeaker (seeed-voicecard)
+  - ✅ Documentación completa en `docs/respeaker-2mic-hat-v1.md`
+- ✅ **Control de LEDs RGB integrados**:
+  - ✅ Driver APA102 implementado (`app/utils/apa102.py`)
+  - ✅ Controlador de LEDs con efectos (`app/utils/led_controller.py`)
+  - ✅ Estados visuales del asistente (idle, listening, thinking, speaking, error)
+  - ✅ Integración con hardware client para feedback visual
+  - ✅ Script de prueba completo (`test_leds.py`)
+  - ✅ Configuración automática del SPI para LEDs RGB
+  - ✅ Documentación completa de uso y troubleshooting
+  - ✅ Pines disponibles para expansión: I2C (GPIO2/3), GPIO12/13
 
 ---
 
