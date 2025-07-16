@@ -48,10 +48,10 @@ services:
       retries: 3
       start_period: 40s
 
-  # Wake-Word Service - Porcupine
+  # Hardware Service - ReSpeaker 2-Mic Pi HAT V1.0 with RGB LEDs
   puertocho-assistant:
     build:
-      context: ./wake-word-porcupine-version
+      context: ./puertocho-assistant-hardware
       dockerfile: Dockerfile
     container_name: puertocho-assistant
     privileged: true
@@ -59,14 +59,15 @@ services:
     devices:
       - "/dev/snd:/dev/snd"
       - "/dev/gpiomem:/dev/gpiomem"
+      - "/dev/spidev0.0:/dev/spidev0.0"
+      - "/dev/spidev0.1:/dev/spidev0.1"
     environment:
       - PORCUPINE_ACCESS_KEY=${PORCUPINE_ACCESS_KEY}
-      - WAKEWORD_SERVICE_URL=http://localhost:8080
-      - WAKEWORD_THRESHOLD=0.5
+      - BACKEND_URL=${BACKEND_URL:-http://localhost:8765}
       - TRANSCRIPTION_SERVICE_URL=${TRANSCRIPTION_SERVICE_URL:-http://localhost:5000/transcribe}
-      - BUTTON_PIN=${BUTTON_PIN:-22}
-      - LED_IDLE_PIN=${LED_IDLE_PIN:-17}
-      - LED_RECORD_PIN=${LED_RECORD_PIN:-27}
+      - BUTTON_PIN=${BUTTON_PIN:-17}
+      - LED_IDLE_PIN=${LED_IDLE_PIN:-12}
+      - LED_RECORD_PIN=${LED_RECORD_PIN:-13}
       - GPIO_ENABLED=true
       - AUDIO_DEVICE_INDEX=${AUDIO_DEVICE_INDEX:-0}
       - PULSE_RUNTIME_PATH=/run/user/1000/pulse
