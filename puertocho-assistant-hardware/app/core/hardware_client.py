@@ -245,6 +245,9 @@ class HardwareClient:
             # Enviar estado inicial al backend
             await self._send_hardware_status()
             
+            # Iniciar tarea en segundo plano para envío periódico de estado
+            status_task = asyncio.create_task(self._periodic_status_sender())
+            
             # Bucle principal
             while not self.should_stop:
                 await self._process_audio_buffer()
@@ -253,7 +256,25 @@ class HardwareClient:
         except Exception as e:
             logger.error(f"❌ Error en bucle principal: {e}")
         finally:
+            # Cancelar tarea de estado periódico
+            if 'status_task' in locals():
+                status_task.cancel()
             await self.stop()
+    
+    async def _periodic_status_sender(self):
+        """Enviar estado del hardware periódicamente"""
+        status_interval = int(os.getenv('HARDWARE_STATUS_INTERVAL', '60'))  # 60 segundos por defecto
+        
+        while not self.should_stop:
+            try:
+                await asyncio.sleep(status_interval)
+                if not self.should_stop:
+                    await self._send_hardware_status()
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"❌ Error en envío periódico de estado: {e}")
+                await asyncio.sleep(5)  # Esperar 5 segundos antes de reintentar
     
     async def _process_audio_buffer(self):
         """Procesar buffer de audio para detección de wake word"""
@@ -321,9 +342,13 @@ class HardwareClient:
                 logger.info("✅ Audio enviado al backend correctamente")
             else:
                 logger.error("❌ Error enviando audio al backend")
+                self._set_state(HardwareState.ERROR)
+                await asyncio.sleep(2)  # Mostrar error por 2 segundos
             
         except Exception as e:
             logger.error(f"❌ Error manejando comando: {e}")
+            self._set_state(HardwareState.ERROR)
+            await asyncio.sleep(2)  # Mostrar error por 2 segundos
         finally:
             self._set_state(HardwareState.IDLE)
     
@@ -389,58 +414,87 @@ class HardwareClient:
         return wav_buffer.read()
     
     async def _send_audio_to_backend(self, wav_bytes: bytes) -> bool:
-        """Enviar audio al backend"""
+        """Enviar audio al backend con reintentos"""
         if not wav_bytes:
             return False
         
-        try:
-            logger.info("🚀 Enviando audio al backend...")
-            
-            files = {'audio': ('audio.wav', wav_bytes, 'audio/wav')}
-            
-            response = requests.post(
-                self.config.backend_audio_endpoint,
-                files=files,
-                timeout=30
-            )
-            
-            response.raise_for_status()
-            result = response.json()
-            
-            logger.info(f"✅ Respuesta del backend: {result}")
-            return True
-            
-        except Exception as e:
-            logger.error(f"❌ Error enviando audio al backend: {e}")
-            return False
+        for attempt in range(self.config.backend_retry_attempts):
+            try:
+                logger.info(f"🚀 Enviando audio al backend (intento {attempt + 1}/{self.config.backend_retry_attempts})...")
+                
+                files = {'audio': ('audio.wav', wav_bytes, 'audio/wav')}
+                
+                response = requests.post(
+                    self.config.backend_audio_endpoint,
+                    files=files,
+                    timeout=self.config.backend_timeout
+                )
+                
+                response.raise_for_status()
+                result = response.json()
+                
+                logger.info(f"✅ Respuesta del backend: {result}")
+                return True
+                
+            except requests.exceptions.ConnectionError:
+                logger.warning(f"⚠️ No se pudo conectar al backend (intento {attempt + 1})")
+                if attempt < self.config.backend_retry_attempts - 1:
+                    await asyncio.sleep(self.config.backend_retry_delay)
+            except requests.exceptions.Timeout:
+                logger.warning(f"⚠️ Timeout en el backend (intento {attempt + 1})")
+                if attempt < self.config.backend_retry_attempts - 1:
+                    await asyncio.sleep(self.config.backend_retry_delay)
+            except requests.exceptions.HTTPError as e:
+                logger.error(f"❌ Error HTTP del backend: {e}")
+                return False
+            except Exception as e:
+                logger.error(f"❌ Error enviando audio al backend: {e}")
+                if attempt < self.config.backend_retry_attempts - 1:
+                    await asyncio.sleep(self.config.backend_retry_delay)
+        
+        logger.error("❌ Falló el envío de audio después de todos los intentos")
+        return False
     
     async def _send_hardware_status(self) -> bool:
-        """Enviar estado del hardware al backend"""
-        try:
-            status = {
-                "microphone_ok": AUDIO_AVAILABLE and self.stream is not None,
-                "gpio_ok": self.gpio_initialized,
-                "porcupine_ok": self.porcupine is not None,
-                "vad_ok": self.vad is not None,
-                "rgb_leds_ok": self.led_controller.is_enabled(),
-                "state": self.state,
-                "audio_config": self.config.get_audio_config()
-            }
-            
-            response = requests.post(
-                self.config.backend_hardware_status_endpoint,
-                json=status,
-                headers={'Content-Type': 'application/json'},
-                timeout=10
-            )
-            
-            response.raise_for_status()
-            logger.info("✅ Estado enviado al backend")
-            return True
-            
-        except Exception as e:
-            logger.error(f"❌ Error enviando estado al backend: {e}")
-            return False
+        """Enviar estado del hardware al backend con reintentos"""
+        for attempt in range(self.config.backend_retry_attempts):
+            try:
+                status = {
+                    "microphone_ok": AUDIO_AVAILABLE and self.stream is not None,
+                    "gpio_ok": self.gpio_initialized,
+                    "porcupine_ok": self.porcupine is not None,
+                    "vad_ok": self.vad is not None,
+                    "rgb_leds_ok": self.led_controller.is_enabled(),
+                    "state": self.state,
+                    "audio_config": self.config.get_audio_config()
+                }
+                
+                response = requests.post(
+                    self.config.backend_hardware_status_endpoint,
+                    json=status,
+                    headers={'Content-Type': 'application/json'},
+                    timeout=self.config.backend_timeout
+                )
+                
+                response.raise_for_status()
+                logger.info("✅ Estado enviado al backend")
+                return True
+                
+            except requests.exceptions.ConnectionError:
+                logger.warning(f"⚠️ No se pudo conectar al backend para enviar estado (intento {attempt + 1})")
+                if attempt < self.config.backend_retry_attempts - 1:
+                    await asyncio.sleep(self.config.backend_retry_delay)
+            except requests.exceptions.Timeout:
+                logger.warning(f"⚠️ Timeout enviando estado al backend (intento {attempt + 1})")
+                if attempt < self.config.backend_retry_attempts - 1:
+                    await asyncio.sleep(self.config.backend_retry_delay)
+            except Exception as e:
+                logger.error(f"❌ Error enviando estado al backend: {e}")
+                if attempt < self.config.backend_retry_attempts - 1:
+                    await asyncio.sleep(self.config.backend_retry_delay)
+        
+        logger.error("❌ Falló el envío de estado después de todos los intentos")
+        return False
     
     async def stop(self):
         """Detener el cliente"""

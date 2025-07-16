@@ -53,6 +53,11 @@ class Config:
         self.backend_audio_endpoint = f"{self.backend_url}/api/v1/audio/process"
         self.backend_hardware_status_endpoint = f"{self.backend_url}/api/v1/hardware/status"
         
+        # Configuración de timeouts y reintentos
+        self.backend_timeout = int(os.getenv('BACKEND_TIMEOUT', '30'))
+        self.backend_retry_attempts = int(os.getenv('BACKEND_RETRY_ATTEMPTS', '3'))
+        self.backend_retry_delay = float(os.getenv('BACKEND_RETRY_DELAY', '1.0'))
+        
         # Configuración de GPIO - ReSpeaker 2-Mic Pi HAT V1.0
         # Pines ocupados por el módulo:
         # - Audio: WM8960 codec (I2S)

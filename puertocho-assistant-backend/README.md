@@ -2,71 +2,77 @@
 
 ## Descripción General
 
-Este servicio es el sistema nervioso central del Asistente PuertoCho. Actúa como un intermediario inteligente que gestiona el estado del asistente y orquesta la comunicación en tiempo real entre la interfaz de usuario (el dashboard web) y los componentes de procesamiento de voz (como el servicio de wake-word).
+Este servicio es el **sistema nervioso central** del Asistente PuertoCho. Actúa como un **Gateway y Orquestador**, gestionando el estado del asistente y coordinando la comunicación entre el cliente de hardware (`puertocho-assistant-hardware`), la interfaz de usuario (`puertocho-assistant-web-view`), y los futuros servicios de procesamiento (NLU, TTS, etc.).
 
-Su función principal es centralizar la lógica de estado (`idle`, `listening`, `processing`, `error`) y distribuir esta información a todos los clientes conectados, asegurando que la interfaz de usuario siempre refleje el estado actual del asistente.
+Su función principal es centralizar la lógica de estado (`idle`, `listening`, `processing`, `error`) y distribuir esta información a todos los componentes conectados, asegurando una experiencia de usuario coherente.
 
 ## Arquitectura y Comunicación
 
-El backend está diseñado en torno a un servidor WebSocket para la comunicación bidireccional y en tiempo real, y una API REST para tareas síncronas como health checks o simulaciones.
+El backend está diseñado en torno a una **API REST** para la comunicación con el hardware y un servidor **WebSocket** para la comunicación en tiempo real con la interfaz web.
 
 ```
-Dashboard Web (Cliente) ←───── WebSocket (ws://.../ws) ─────→ Backend API
-                                                                  │
-                                                                  ↓
-                                                    (Futuro) Servicio de Wake-Word
+┌──────────────────────┐     HTTP POST     ┌───────────────────┐     WebSocket     ┌───────────────────┐
+│  Hardware Service    ├──────────────────►│   Backend API     │◄──────────────────►│   Web Dashboard   │
+│ (Envía audio/estado) │                   │    (Gateway)      │                   │  (Muestra estado) │
+└──────────────────────┘                   └───────────────────┘                   └───────────────────┘
+                                                     │
+                                                     ▼
+                                          (Futuro) Servicios Externos
+                                             (STT, NLU, Chat, etc.)
 ```
 
 El flujo de comunicación es el siguiente:
-1.  El **Dashboard Web** establece una conexión persistente con el backend a través de WebSocket.
-2.  Cuando ocurre un evento (ej. un usuario presiona el botón de activación manual en el dashboard), el cliente envía un mensaje JSON al backend.
-3.  El backend recibe el mensaje, actualiza el estado interno del asistente y, a su vez, notifica a **todos** los clientes conectados sobre este cambio de estado (`status_update`).
-4.  Si se procesa un comando, se registra y se envía a los clientes (`command_log`) para que se muestre en el historial.
+1.  El **Hardware Service** detecta la palabra de activación, graba un comando de voz y lo envía al endpoint `POST /api/v1/audio/process`.
+2.  El **Backend API** recibe el audio:
+    a. Cambia el estado del asistente a `processing`.
+    b. Notifica este cambio a todos los clientes **Web Dashboard** conectados vía WebSocket.
+    c. (Futuro) Envía el audio a un servicio de STT/NLU.
+    d. Recibe el resultado, lo registra y lo envía al Web Dashboard.
+    e. Vuelve al estado `idle` y lo notifica.
+3.  Paralelamente, el **Hardware Service** envía su estado (micrófono OK, etc.) al endpoint `POST /api/v1/hardware/status`, y el backend lo retransmite a los dashboards.
 
 ## API de Comunicación
 
+### Endpoints REST (Prefijo: `/api/v1`)
+
+-   `POST /audio/process`:
+    -   **Descripción**: Recibe un archivo de audio del servicio de hardware para su procesamiento.
+    -   **Body**: `multipart/form-data` con un campo `audio` que contiene el archivo `.wav`.
+    -   **Respuesta**: JSON con el estado del procesamiento y la transcripción (simulada por ahora).
+
+-   `POST /hardware/status`:
+    -   **Descripción**: Recibe un objeto JSON con el estado actual del hardware.
+    -   **Body**: Objeto JSON con el estado del hardware (ej. `{"microphone_ok": true, "state": "idle"}`).
+    -   **Respuesta**: JSON confirmando la recepción.
+
 ### WebSocket
 
-- **URL**: `ws://<host>:8765/ws`
-- **Descripción**: Es el canal principal para la comunicación asíncrona y en tiempo real.
-
-#### Mensajes del Cliente hacia el Backend
-El frontend envía mensajes para iniciar acciones en el asistente.
-
-```json
-{
-  "type": "manual_activation"
-}
-```
-- **`manual_activation`**: Solicita al backend que inicie el ciclo de escucha del asistente, simulando la detección de la palabra de activación.
+-   **URL**: `ws://<host>:8000/ws`
+-   **Descripción**: Canal principal para la comunicación en tiempo real con la interfaz web.
 
 #### Mensajes del Backend hacia el Cliente
 El backend envía mensajes para notificar al frontend sobre cambios de estado o eventos.
 
-```json
-{
-  "type": "status_update",
-  "payload": {
-    "status": "idle|listening|processing|error"
-  }
-}
-```
-- **`status_update`**: Informa al dashboard sobre el estado actual del asistente para que la UI pueda reaccionar visualmente (ej. mostrar un ícono de "escuchando").
+-   **`status_update`**: Informa sobre el estado del asistente.
+    ```json
+    {
+      "type": "status_update",
+      "payload": { "status": "idle|listening|processing|error" }
+    }
+    ```
 
-```json
-{
-  "type": "command_log",
-  "payload": {
-    "command": "texto del comando reconocido",
-    "timestamp": 1234567890123
-  }
-}
-```
-- **`command_log`**: Envía un comando que ha sido procesado para que el dashboard lo muestre en el historial de comandos.
+-   **`hardware_status_update`**: Informa sobre el estado del hardware.
+    ```json
+    {
+      "type": "hardware_status_update",
+      "payload": { "microphone_ok": true, "state": "idle", ... }
+    }
+    ```
 
-### Endpoints REST
-
-- `GET /`: Endpoint de información básica del servicio.
-- `GET /health`: Proporciona un health check para monitorización y diagnóstico.
-- `POST /simulate/command`: Permite simular la recepción de un comando. Útil para desarrollo y pruebas.
-- `POST /simulate/status`: Permite forzar un cambio de estado en el asistente. Útil para desarrollo y pruebas.
+-   **`command_log`**: Envía un comando procesado para el historial.
+    ```json
+    {
+      "type": "command_log",
+      "payload": { "command": "...", "timestamp": 1234567890 }
+    }
+    ```
