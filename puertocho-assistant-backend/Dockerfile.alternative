@@ -1,10 +1,18 @@
-# Dockerfile para PuertoCho Assistant Backend
-# Usar imagen base que ya tiene herramientas de compilación
-FROM python:3.11
+# Dockerfile alternativo para PuertoCho Assistant Backend
+# Usar imagen base Alpine que es más pequeña y estable
+FROM python:3.11-alpine
 
 # Configurar variables de entorno
-ENV DEBIAN_FRONTEND=noninteractive
 ENV PIP_NO_CACHE_DIR=1
+
+# Instalar dependencias para compilar paquetes Python
+RUN apk add --no-cache \
+    gcc \
+    g++ \
+    musl-dev \
+    make \
+    pkgconfig \
+    && rm -rf /var/cache/apk/*
 
 # Establecer directorio de trabajo
 WORKDIR /app
