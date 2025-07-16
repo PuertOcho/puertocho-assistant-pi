@@ -1,0 +1,31 @@
+# Dockerfile mínimo para Raspberry Pi 32-bit
+FROM python:3.11
+
+# Configurar variables de entorno
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PIP_NO_CACHE_DIR=1
+ENV PYTHONUNBUFFERED=1
+
+# Intentar instalar solo lo esencial sin actualizaciones de repositorio
+RUN apt-get update --allow-unauthenticated --allow-releaseinfo-change || true && \
+    apt-get install -y --allow-unauthenticated \
+    libasound2-dev \
+    libffi-dev \
+    portaudio19-dev \
+    python3-dev \
+    alsa-utils \
+    || echo "Algunos paquetes no se pudieron instalar, continuando..." && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY app/requirements.txt .
+
+# Instalar solo las dependencias Python más básicas
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
+    pip install --no-cache-dir --only-binary=all -r requirements.txt || \
+    pip install --no-cache-dir --prefer-binary -r requirements.txt || \
+    pip install --no-cache-dir -r requirements.txt
+
+COPY app /app
+
+CMD ["python", "-u", "main.py"]
