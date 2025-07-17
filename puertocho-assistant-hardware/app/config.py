@@ -1,319 +1,143 @@
+#!/usr/bin/env python3
 """
-Gestión de configuración centralizada para el asistente PuertoCho.
+Configuration module for PuertoCho Assistant Hardware Service
 """
 
 import os
-import sys
-from pathlib import Path
+import logging
+from dataclasses import dataclass, field
 from typing import Optional
+from dotenv import load_dotenv
 
-# Obtener la ruta base del proyecto (directorio que contiene 'app')
-PROJECT_ROOT = Path(__file__).parent.parent.absolute()
+# Cargar variables de entorno
+load_dotenv()
 
-def load_env_variables():
-    """Cargar variables de entorno desde archivo .env si existe"""
-    try:
-        from dotenv import load_dotenv
-        
-        # Buscar .env en diferentes ubicaciones
-        env_locations = [
-            PROJECT_ROOT / '.env',
-            PROJECT_ROOT.parent / '.env',
-            Path.cwd() / '.env'
-        ]
-        
-        for env_file in env_locations:
-            if env_file.exists():
-                load_dotenv(env_file)
-                print(f"✅ Variables cargadas desde {env_file}")
-                return True
-        
-        print("ℹ️  No se encontró archivo .env, usando variables de entorno del sistema")
-        return False
-        
-    except ImportError:
-        print("ℹ️  python-dotenv no instalado, usando variables de entorno del sistema")
-        return False
+@dataclass
+class AudioConfig:
+    """Configuración de audio"""
+    device_name: str = os.getenv("AUDIO_DEVICE_NAME", "seeed-voicecard")
+    sample_rate: int = int(os.getenv("AUDIO_SAMPLE_RATE", "16000"))
+    channels: int = int(os.getenv("AUDIO_CHANNELS", "2"))
+    chunk_size: int = int(os.getenv("AUDIO_CHUNK_SIZE", "1024"))
+    format: str = os.getenv("AUDIO_FORMAT", "int16")
+    buffer_size: int = int(os.getenv("AUDIO_BUFFER_SIZE", "4096"))
 
-class Config:
-    """Configuración centralizada del asistente"""
-    
-    def __init__(self):
-        # Cargar variables de entorno
-        load_env_variables()
-        
-        # Configuración de Porcupine
-        self.porcupine_access_key = os.getenv('PORCUPINE_ACCESS_KEY')
-        
-        # URLs de servicios - Solo backend
-        self.backend_url = os.getenv(
-            'BACKEND_URL', 
-            'http://localhost:8000'
-        )
-        self.backend_audio_endpoint = f"{self.backend_url}/api/v1/audio/process"
-        self.backend_hardware_status_endpoint = f"{self.backend_url}/api/v1/hardware/status"
-        
-        # Configuración de timeouts y reintentos
-        self.backend_timeout = int(os.getenv('BACKEND_TIMEOUT', '30'))
-        self.backend_retry_attempts = int(os.getenv('BACKEND_RETRY_ATTEMPTS', '3'))
-        self.backend_retry_delay = float(os.getenv('BACKEND_RETRY_DELAY', '1.0'))
-        
-        # Configuración de GPIO - ReSpeaker 2-Mic Pi HAT V1.0
-        # Pines ocupados por el módulo:
-        # - Audio: WM8960 codec (I2S)
-        # - RGB LEDs: 3 APA102 RGB LEDs (SPI)
-        # - Botón: GPIO17 (por defecto en el módulo)
-        # - Micrófonos: Mic L y Mic R (estéreo)
-        
-        # Pines disponibles para expansión:
-        # - Grove I2C: GPIO2 (SDA), GPIO3 (SCL) 
-        # - Grove GPIO12: GPIO12 y GPIO13
-        
-        # Configuración del botón integrado del módulo
-        self.button_pin = int(os.getenv('BUTTON_PIN', 17))  # Botón integrado del ReSpeaker
-        
-        # LEDs externos opcionales (no usar los APA102 del módulo por ahora)
-        # Estos pueden conectarse a los pines Grove disponibles
-        self.led_idle_pin = int(os.getenv('LED_IDLE_PIN', 12))    # Grove GPIO12
-        self.led_record_pin = int(os.getenv('LED_RECORD_PIN', 13))  # Grove GPIO13
-        
-        # Configuración I2C para expansiones futuras
-        self.i2c_sda_pin = 2  # Grove I2C SDA
-        self.i2c_scl_pin = 3  # Grove I2C SCL
-        
-        # Configuración de audio
-        self.porcupine_rate = 16000
-        self.channels = 1
-        self.chunk_size = 512
-        self.frame_length = self.chunk_size
-        self.audio_device_index = self._detect_audio_device()  # Detectar dispositivo automáticamente
-        
-        # Rutas de archivos
-        self.commands_file = PROJECT_ROOT / 'app' / 'commands.json'
-        self.model_file = PROJECT_ROOT / 'app' / 'Puerto-ocho_es_raspberry-pi_v3_0_0.ppn'
-        self.params_file = PROJECT_ROOT / 'app' / 'porcupine_params_es.pv'
-        
-        # Validar configuración crítica
-        self._validate_config()
-    
-    def _validate_config(self):
-        """Validar configuración crítica"""
-        if not self.porcupine_access_key:
-            raise ValueError(
-                "❌ ERROR: PORCUPINE_ACCESS_KEY no configurada. "
-                "Configúrala en el archivo .env o como variable de entorno."
-            )
-        
-        # Verificar archivos críticos
-        critical_files = {
-            'commands.json': self.commands_file,
-            'modelo personalizado': self.model_file,
-            'parámetros': self.params_file
-        }
-        
-        for file_desc, file_path in critical_files.items():
-            if not file_path.exists():
-                print(f"⚠️  Archivo {file_desc} no encontrado: {file_path}")
-    
-    def _detect_audio_device(self) -> int:
-        """Detectar automáticamente el dispositivo de audio correcto"""
-        try:
-            import sounddevice as sd
-            
-            # Primero intentar usar la variable de entorno si está definida
-            env_device = os.getenv('AUDIO_DEVICE_INDEX')
-            if env_device is not None:
-                try:
-                    device_index = int(env_device)
-                    # Verificar que el dispositivo existe y tiene entrada
-                    devices = sd.query_devices()
-                    if device_index < len(devices) and devices[device_index]['max_input_channels'] > 0:
-                        print(f"🎵 Usando dispositivo de audio configurado: {device_index}")
-                        return device_index
-                except ValueError:
-                    pass
-            
-            # Si no hay variable de entorno, buscar automáticamente
-            devices = sd.query_devices()
-            print("🔍 Detectando dispositivos de audio...")
-            
-            # Buscar específicamente el ReSpeaker (seeed-voicecard)
-            for i, device in enumerate(devices):
-                if device['max_input_channels'] > 0:
-                    device_name = device['name'].lower()
-                    if 'seeed' in device_name or 'voicecard' in device_name or 'respeaker' in device_name:
-                        print(f"✅ ReSpeaker detectado: {i} - {device['name']}")
-                        return i
-            
-            # Si no se encuentra ReSpeaker, buscar dispositivos con entrada
-            input_devices = []
-            for i, device in enumerate(devices):
-                if device['max_input_channels'] > 0:
-                    input_devices.append((i, device))
-                    print(f"  {i}: {device['name']} (INPUT: {device['max_input_channels']} canales)")
-            
-            if not input_devices:
-                print("⚠️ No se encontraron dispositivos de entrada, usando default")
-                return None  # Usar default
-            
-            # Usar el primer dispositivo disponible
-            device_index, device = input_devices[0]
-            print(f"✅ Usando primer dispositivo disponible: {device_index} - {device['name']}")
-            return device_index
-            
-        except ImportError:
-            print("⚠️ sounddevice no disponible, usando default")
-            return None
-        except Exception as e:
-            print(f"⚠️ Error detectando audio: {e}, usando default")
-            return None
+@dataclass
+class WakeWordConfig:
+    """Configuración del wake word"""
+    model_path: str = os.getenv("WAKE_WORD_MODEL_PATH", "/app/models/Puerto-ocho_es_raspberry-pi_v3_0_0.ppn")
+    sensitivity: float = float(os.getenv("WAKE_WORD_SENSITIVITY", "0.5"))
+    access_key: str = os.getenv("PORCUPINE_ACCESS_KEY", "")
 
-    def get_project_root(self) -> Path:
-        """Obtener la ruta raíz del proyecto"""
-        return PROJECT_ROOT
-    
-    def test_audio_device(self):
-        """Probar el dispositivo de audio específico"""
-        try:
-            import sounddevice as sd
-            device_text = f"por defecto" if self.audio_device_index is None else f"{self.audio_device_index}"
-            print(f"🔧 Probando dispositivo de audio {device_text}...")
-            
-            # Verificar que el dispositivo existe
-            devices = sd.query_devices()
-            if self.audio_device_index is not None and self.audio_device_index >= len(devices):
-                print(f"❌ El dispositivo {self.audio_device_index} no existe")
-                return False
-            
-            if self.audio_device_index is not None:
-                device = devices[self.audio_device_index]
-                print(f"📱 Dispositivo: {device['name']}")
-                print(f"🎤 Canales de entrada: {device['max_input_channels']}")
-                print(f"🔊 Canales de salida: {device['max_output_channels']}")
-                
-                if device['max_input_channels'] == 0:
-                    print("❌ El dispositivo no tiene canales de entrada")
-                    return False
-            else:
-                print("📱 Usando dispositivo por defecto del sistema")
-            
-            # Probar grabación rápida
-            try:
-                with sd.RawInputStream(
-                    samplerate=44100,
-                    blocksize=512,
-                    dtype='int16',
-                    channels=1,
-                    device=self.audio_device_index
-                ) as stream:
-                    data = stream.read(512)
-                    print("✅ Prueba de grabación exitosa")
-                    return True
-            except Exception as e:
-                print(f"❌ Error en prueba de grabación: {e}")
-                return False
-                
-        except ImportError:
-            print("⚠️ sounddevice no disponible para probar audio")
-            return False
+@dataclass
+class VADConfig:
+    """Configuración del Voice Activity Detection"""
+    mode: int = int(os.getenv("VAD_MODE", "3"))
+    frame_duration: int = int(os.getenv("VAD_FRAME_DURATION", "30"))
+    silence_timeout: float = float(os.getenv("VAD_SILENCE_TIMEOUT", "2.0"))
+    speech_timeout: float = float(os.getenv("VAD_SPEECH_TIMEOUT", "10.0"))
 
-    def list_audio_devices(self):
-        """Listar dispositivos de audio disponibles"""
-        try:
-            import sounddevice as sd
-            print("🎵 Dispositivos de audio disponibles:")
-            devices = sd.query_devices()
-            for i, device in enumerate(devices):
-                device_type = []
-                if device['max_input_channels'] > 0:
-                    device_type.append("INPUT")
-                if device['max_output_channels'] > 0:
-                    device_type.append("OUTPUT")
-                print(f"  {i}: {device['name']} ({', '.join(device_type)})")
-            return devices
-        except ImportError:
-            print("⚠️ sounddevice no disponible para listar dispositivos")
-            return []
+@dataclass
+class GPIOConfig:
+    """Configuración de GPIO"""
+    button_pin: int = int(os.getenv("BUTTON_PIN", "17"))
+    debounce_time: float = float(os.getenv("BUTTON_DEBOUNCE_TIME", "0.2"))
+    long_press_time: float = float(os.getenv("BUTTON_LONG_PRESS_TIME", "2.0"))
 
-    def detect_supported_sample_rate(self) -> int:
-        """Detectar qué tasa de muestreo soporta el dispositivo"""
-        try:
-            import sounddevice as sd
-            
-            # Tasas comunes en orden de preferencia
-            rates_to_try = [16000, 44100, 48000, 22050, 8000]
-            
-            device_text = f"por defecto" if self.audio_device_index is None else f"{self.audio_device_index}"
-            
-            for rate in rates_to_try:
-                try:
-                    # Probar si la tasa funciona con el dispositivo específico
-                    test_stream = sd.RawInputStream(
-                        samplerate=rate,
-                        blocksize=512,
-                        dtype='int16',
-                        channels=1,
-                        device=self.audio_device_index
-                    )
-                    test_stream.close()
-                    print(f"✅ Tasa de audio soportada detectada: {rate} Hz (device {device_text})")
-                    return rate
-                except Exception as e:
-                    print(f"⚠️ Tasa {rate} Hz no soportada: {e}")
-                    continue
-            
-            # Si ninguna funciona, usar 44100 como fallback
-            print("⚠️ Usando 44100 Hz como fallback")
-            return 44100
-            
-        except ImportError:
-            print("⚠️ sounddevice no disponible, usando 16000 Hz")
-            return 16000
+@dataclass
+class LEDConfig:
+    """Configuración de LEDs"""
+    count: int = int(os.getenv("LED_COUNT", "3"))
+    spi_bus: int = int(os.getenv("LED_SPI_BUS", "0"))
+    spi_device: int = int(os.getenv("LED_SPI_DEVICE", "0"))
+    brightness: int = int(os.getenv("LED_BRIGHTNESS", "128"))
+    animation_speed: float = float(os.getenv("LED_ANIMATION_SPEED", "0.1"))
 
-    def validate(self) -> bool:
-        """Validar configuración completa"""
-        try:
-            self._validate_config()
-            return True
-        except Exception as e:
-            print(f"❌ Validación fallida: {e}")
-            return False
+@dataclass
+class NFCConfig:
+    """Configuración de NFC"""
+    i2c_bus: int = int(os.getenv("NFC_I2C_BUS", "1"))
+    i2c_address: int = int(os.getenv("NFC_I2C_ADDRESS", "0x48"), 16)
+    timeout: float = float(os.getenv("NFC_TIMEOUT", "5.0"))
+
+@dataclass
+class BackendConfig:
+    """Configuración del backend"""
+    url: str = os.getenv("BACKEND_URL", "http://localhost:8765")
+    ws_url: str = os.getenv("BACKEND_WS_URL", "ws://localhost:8765/ws")
+    timeout: int = int(os.getenv("BACKEND_TIMEOUT", "30"))
+
+@dataclass
+class HardwareConfig:
+    """Configuración del servicio de hardware"""
+    host: str = os.getenv("HARDWARE_HOST", "0.0.0.0")
+    port: int = int(os.getenv("HARDWARE_PORT", "8080"))
+    log_level: str = os.getenv("HARDWARE_LOG_LEVEL", "INFO")
+
+@dataclass
+class AppConfig:
+    """Configuración principal de la aplicación"""
+    debug_mode: bool = os.getenv("DEBUG_MODE", "false").lower() == "true"
+    simulate_hardware: bool = os.getenv("SIMULATE_HARDWARE", "false").lower() == "true"
+    test_mode: bool = os.getenv("TEST_MODE", "false").lower() == "true"
+    log_level: str = os.getenv("LOG_LEVEL", "INFO")
+    log_format: str = os.getenv("LOG_FORMAT", "json")
+    log_file: str = os.getenv("LOG_FILE", "/app/logs/hardware.log")
     
-    def get_backend_endpoint(self) -> str:
-        """Obtener endpoint del backend"""
-        return self.backend_url
-    
-    def get_audio_config(self) -> str:
-        """Obtener configuración de audio como string"""
-        sample_rate = self.detect_supported_sample_rate()
-        device_text = f"device {self.audio_device_index}" if self.audio_device_index is not None else "default device"
-        
-        # Detectar si es ReSpeaker
-        respeaker_info = self.detect_respeaker()
-        if respeaker_info:
-            return f"{sample_rate} Hz (ReSpeaker {respeaker_info} - device {self.audio_device_index})"
-        else:
-            return f"{sample_rate} Hz ({device_text})"
-    
-    def detect_respeaker(self) -> Optional[str]:
-        """Detectar si hay un módulo ReSpeaker conectado"""
-        try:
-            import sounddevice as sd
-            devices = sd.query_devices()
-            
-            for device in devices:
-                device_name = device['name'].lower()
-                if 'seeed' in device_name or 'voicecard' in device_name:
-                    return "2-Mic Pi HAT V1.0"
-                elif 'respeaker' in device_name:
-                    return "detected"
-            
-            return None
-            
-        except ImportError:
-            return None
-        except Exception:
-            return None
+    # Configuraciones específicas
+    audio: AudioConfig = field(default_factory=AudioConfig)
+    wake_word: WakeWordConfig = field(default_factory=WakeWordConfig)
+    vad: VADConfig = field(default_factory=VADConfig)
+    gpio: GPIOConfig = field(default_factory=GPIOConfig)
+    led: LEDConfig = field(default_factory=LEDConfig)
+    nfc: NFCConfig = field(default_factory=NFCConfig)
+    backend: BackendConfig = field(default_factory=BackendConfig)
+    hardware: HardwareConfig = field(default_factory=HardwareConfig)
 
 # Instancia global de configuración
-config = Config()
+config = AppConfig()
+
+def get_log_level():
+    """Obtener nivel de logging"""
+    level_mapping = {
+        "DEBUG": logging.DEBUG,
+        "INFO": logging.INFO,
+        "WARNING": logging.WARNING,
+        "ERROR": logging.ERROR,
+        "CRITICAL": logging.CRITICAL
+    }
+    return level_mapping.get(config.log_level.upper(), logging.INFO)
+
+def validate_config():
+    """Validar configuración"""
+    errors = []
+    
+    # Validar wake word
+    if not config.wake_word.access_key:
+        errors.append("PORCUPINE_ACCESS_KEY is required")
+    
+    if not os.path.exists(config.wake_word.model_path):
+        errors.append(f"Wake word model not found: {config.wake_word.model_path}")
+    
+    # Validar audio
+    if config.audio.sample_rate <= 0:
+        errors.append("AUDIO_SAMPLE_RATE must be positive")
+    
+    if config.audio.channels <= 0:
+        errors.append("AUDIO_CHANNELS must be positive")
+    
+    # Validar GPIO
+    if config.gpio.button_pin < 0 or config.gpio.button_pin > 40:
+        errors.append("BUTTON_PIN must be between 0 and 40")
+    
+    # Validar LED
+    if config.led.count <= 0:
+        errors.append("LED_COUNT must be positive")
+    
+    if config.led.brightness < 0 or config.led.brightness > 255:
+        errors.append("LED_BRIGHTNESS must be between 0 and 255")
+    
+    if errors:
+        raise ValueError(f"Configuration errors: {'; '.join(errors)}")
+    
+    return True

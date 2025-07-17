@@ -1,127 +1,261 @@
+# PuertoCho Assistant Hardware Service
 
-# PuertoCho Assistant - Hardware Client
+🎙️ **Hardware service for PuertoCho Assistant on Raspberry Pi**
 
-Este módulo (`puertocho-assistant-hardware`) es el componente de hardware dedicado del ecosistema PuertoCho Assistant. Está diseñado para ejecutarse en una Raspberry Pi equipada con un **ReSpeaker 2-Mic Pi HAT V1.0**.
+## 📋 Description
 
-## 🚀 Visión General
+This service manages all hardware components of the PuertoCho Assistant running on a Raspberry Pi 4B with ReSpeaker 2-Mic Pi HAT V1.0. It handles audio recording, LED control, button detection, NFC operations, and wake word detection.
 
-El propósito principal de este servicio es actuar como un cliente ligero y eficiente que gestiona todas las interacciones de hardware. Sus responsabilidades clave son:
+## 🔧 Hardware Components
 
-1.  **Detección de Wake Word**: Escucha continuamente la palabra de activación ("Puerto Ocho") utilizando el motor `Porcupine`.
-2.  **Captura de Audio**: Una vez activado, graba el comando de voz del usuario.
-3.  **Comunicación con el Backend**: Envía el audio capturado al `puertocho-assistant-backend` para su procesamiento (NLU, ejecución de acciones, etc.).
-4.  **Feedback de Hardware**: Proporciona feedback visual al usuario a través de los LEDs RGB integrados en el ReSpeaker HAT y gestiona la entrada del botón físico.
-5.  **Reporte de Estado**: Informa su estado operativo al backend para que pueda ser monitorizado, por ejemplo, desde `puertocho-assistant-web-view`.
+### Primary Hardware
+- **Raspberry Pi 4B** - Main computing unit
+- **ReSpeaker 2-Mic Pi HAT V1.0** - Audio input/output, LEDs, button
+- **NFC Module** - I2C connected NFC reader/writer
 
-## 🏗️ Arquitectura del Módulo (`app/`)
+### ReSpeaker Features
+- 2x Microphones (stereo input)
+- 3x APA102 RGB LEDs
+- 1x Button (GPIO17)
+- Audio codec WM8960
+- 3.5mm audio output
 
-La lógica principal reside en la carpeta `app/`, que sigue una estructura limpia para separar responsabilidades.
+## 🚀 Quick Start
 
-### `main.py` / `main_modular.py`
--   **Propósito**: Es el punto de entrada de la aplicación.
--   **Funcionamiento**: Inicializa la clase `PuertoChoApp`, que a su vez instancia y ejecuta el `HardwareClient`. Configura los manejadores de señales para una terminación limpia del programa.
+### Prerequisites
+- Raspberry Pi 4B with Raspberry Pi OS
+- ReSpeaker 2-Mic Pi HAT V1.0 installed
+- Docker and Docker Compose installed
+- I2C and SPI enabled
 
-### `config.py`
--   **Propósito**: Actúa como el centro de configuración de la aplicación.
--   **Funcionamiento**:
-    -   Carga variables de entorno desde un archivo `.env` ubicado en la raíz del proyecto.
-    -   Define y valida todas las configuraciones críticas: `PORCUPINE_ACCESS_KEY`, URLs de los servicios de backend, pines GPIO, y rutas a archivos de modelos.
-    -   Implementa la **detección automática del dispositivo de audio**, buscando específicamente el hardware ReSpeaker (`seeed-voicecard`).
-    -   Proporciona métodos para obtener la configuración de audio y validar el entorno.
+### Setup
+1. **Run setup script**:
+   ```bash
+   ./scripts/setup.sh
+   ```
 
-### `core/hardware_client.py`
--   **Propósito**: Es el corazón del servicio. Contiene toda la lógica operativa.
--   **Funcionamiento**:
-    -   **Inicialización**: Prepara todos los componentes de hardware: GPIO, Porcupine, VAD (Voice Activity Detection) y el stream de audio con `sounddevice`.
-    -   **Gestión de Estado**: Mantiene el estado actual del asistente (`IDLE`, `LISTENING`, `PROCESSING`, `ERROR`) y lo comunica al `led_controller`.
-    -   **Bucle Principal**: En un bucle asíncrono, procesa el audio de la cola, lo analiza con Porcupine para detectar la wake word y gestiona la pulsación del botón físico.
-    -   **Manejo de Comandos**: Al detectar la activación, orquesta el proceso de:
-        1.  Cambiar al estado `LISTENING`.
-        2.  Grabar el audio del usuario hasta detectar un silencio (`_record_until_silence`).
-        3.  Cambiar al estado `PROCESSING`.
-        4.  Empaquetar el audio en formato WAV en memoria.
-        5.  Enviar el audio al backend (`_send_audio_to_backend`).
-        6.  Volver al estado `IDLE`.
+2. **Configure environment**:
+   ```bash
+   cp .env.example .env
+   # Edit .env with your settings
+   ```
 
-### `utils/`
-Este paquete contiene módulos de utilidad que soportan al `hardware_client`.
+3. **Build and start service**:
+   ```bash
+   docker-compose build puertocho-assistant-hardware
+   docker-compose up puertocho-assistant-hardware
+   ```
 
--   **`led_controller.py`**:
-    -   **Propósito**: Abstrae el control de los 3 LEDs RGB (APA102) integrados en el ReSpeaker HAT.
-    -   **Funcionamiento**: Implementa patrones de animación para cada estado del asistente (`idle`, `wakeup`, `listening`, `thinking`, `speaking`, `error`), inspirados en asistentes como Google Home. Se ejecuta en un hilo separado para no bloquear el proceso principal.
--   **`apa102.py`**:
-    -   **Propósito**: Driver de bajo nivel para comunicarse con los LEDs APA102 a través de la interfaz SPI de la Raspberry Pi.
--   **`logging_config.py`**:
-    -   **Propósito**: Configuración centralizada del logging para mantener un formato consistente en toda la aplicación.
+## 📁 Project Structure
 
-## 🔌 Conectividad con Otros Módulos
+```
+puertocho-assistant-hardware/
+├── Dockerfile                 # Container configuration
+├── README.md                  # This file
+├── .env.example              # Environment variables template
+├── .gitignore                # Git ignore rules
+├── app/                      # Main application
+│   ├── main.py               # Entry point
+│   ├── config.py             # Configuration management
+│   ├── requirements.txt      # Python dependencies
+│   ├── core/                 # Core hardware modules
+│   │   ├── audio_manager.py  # Audio recording/playback
+│   │   ├── led_controller.py # LED control
+│   │   ├── button_handler.py # Button detection
+│   │   ├── nfc_manager.py    # NFC operations
+│   │   ├── state_machine.py  # State management
+│   │   └── wake_word_detector.py # Wake word detection
+│   ├── api/                  # HTTP/WebSocket API
+│   │   ├── http_server.py    # HTTP endpoints
+│   │   └── websocket_client.py # WebSocket communication
+│   ├── utils/                # Utilities
+│   │   ├── logger.py         # Logging system
+│   │   ├── metrics.py        # Performance metrics
+│   │   └── calibration.py    # Hardware calibration
+│   └── tests/                # Test modules
+├── scripts/                  # Setup and utility scripts
+│   ├── setup.sh              # Installation script
+│   ├── test_hardware.py      # Hardware tests
+│   └── calibrate.py          # Calibration tool
+├── logs/                     # Log files
+├── config/                   # Configuration files
+└── models/                   # Wake word models
+    ├── porcupine_params_es.pv
+    └── Puerto-ocho_es_raspberry-pi_v3_0_0.ppn
+```
 
-Este servicio no funciona de forma aislada. Su principal objetivo es conectar el hardware físico con el cerebro del asistente (`backend`).
+## 🔌 Hardware Configuration
 
-### Con `puertocho-assistant-backend`
+### GPIO Pins Used
+- **GPIO17**: Button (built-in on ReSpeaker)
+- **GPIO2/3**: I2C (SDA/SCL) - for NFC module
+- **GPIO12/13**: Available for expansion
+- **SPI0**: LEDs control (APA102)
+- **I2S**: Audio (WM8960 codec)
 
-La comunicación se realiza a través de una API REST. El `hardware_client` consume dos endpoints principales del backend:
+### I2C Devices
+- **NFC Module**: Address 0x48 (configurable)
 
-1.  **`POST /api/v1/audio/process`**:
-    -   **Cuándo se usa**: Después de que el usuario dice un comando y este es grabado.
-    -   **Qué envía**: Un `multipart/form-data` que contiene el audio grabado como un archivo `audio.wav`.
-    -   **Qué espera**: Una respuesta JSON del backend confirmando que el audio fue recibido y está siendo procesado.
-    -   **Robustez**: Incluye sistema de reintentos automáticos configurables para manejar errores de red.
+### SPI Devices
+- **LED Controller**: SPI bus 0, device 0
 
-2.  **`POST /api/v1/hardware/status`**:
-    -   **Cuándo se usa**: Al iniciar la aplicación y periódicamente cada 60 segundos (configurable).
-    -   **Qué envía**: Un objeto JSON con el estado actual de los componentes de hardware. Ejemplo:
-        ```json
-        {
-            "microphone_ok": true,
-            "gpio_ok": true,
-            "porcupine_ok": true,
-            "vad_ok": true,
-            "rgb_leds_ok": true,
-            "state": "idle",
-            "audio_config": "16000 Hz (ReSpeaker 2-Mic Pi HAT V1.0 - device 2)"
-        }
-        ```
-    -   **Propósito**: Permite al backend (y a otros servicios a través de él) conocer la salud y el estado del cliente de hardware en tiempo real.
-    -   **Robustez**: Incluye manejo de errores y reintentos para garantizar que el backend esté siempre informado del estado del hardware.
+## 🎛️ Configuration
 
-### Con `puertocho-assistant-web-view`
+### Environment Variables
+Key configuration options in `.env`:
 
-La conexión es **indirecta**. El `hardware_client` no se comunica directamente con la interfaz web. El flujo es el siguiente:
+```bash
+# Audio
+AUDIO_DEVICE_NAME=seeed-voicecard
+AUDIO_SAMPLE_RATE=16000
+AUDIO_CHANNELS=2
 
-1.  `hardware-client` envía su estado al `backend`.
-2.  `web-view` solicita el estado del hardware al `backend`.
-3.  El `backend` sirve la información que recibió previamente del `hardware-client`.
+# Wake Word
+WAKE_WORD_MODEL_PATH=/app/models/Puerto-ocho_es_raspberry-pi_v3_0_0.ppn
+WAKE_WORD_SENSITIVITY=0.5
+PORCUPINE_ACCESS_KEY=your_key_here
 
-De esta manera, la `web-view` puede mostrar un dashboard con el estado en tiempo real del hardware de la Raspberry Pi.
+# Hardware
+BUTTON_PIN=17
+LED_COUNT=3
+LED_BRIGHTNESS=128
 
-## ⚙️ Configuración
+# Backend
+BACKEND_URL=http://localhost:8765
+BACKEND_WS_URL=ws://localhost:8765/ws
+```
 
-La configuración se gestiona a través de un archivo `.env` en la raíz del proyecto. Las variables más importantes para este módulo son:
+## 🌐 API Endpoints
 
--   `PORCUPINE_ACCESS_KEY`: Clave de API de Picovoice para usar Porcupine. **(Obligatoria)**
--   `BACKEND_URL`: La URL base del servicio `puertocho-assistant-backend` (ej. `http://localhost:8000`).
--   `BACKEND_TIMEOUT`: Tiempo de espera para requests HTTP al backend (por defecto 30 segundos).
--   `BACKEND_RETRY_ATTEMPTS`: Número de intentos para requests fallidos (por defecto 3).
--   `BACKEND_RETRY_DELAY`: Delay entre reintentos (por defecto 1.0 segundos).
--   `HARDWARE_STATUS_INTERVAL`: Intervalo para envío periódico de estado del hardware (por defecto 60 segundos).
--   `BUTTON_PIN`: El pin GPIO para el botón físico (por defecto `17` para el ReSpeaker).
--   `LED_RGB_ENABLED`: `true` o `false` para habilitar/deshabilitar los LEDs RGB.
--   `LED_RGB_BRIGHTNESS`: Brillo de los LEDs (1-31).
--   `AUDIO_DEVICE_INDEX`: Permite forzar un índice de dispositivo de audio específico, aunque por defecto se autodetecta.
+### HTTP Endpoints
+- `GET /health` - Service health check
+- `POST /audio/start` - Start audio recording
+- `POST /audio/stop` - Stop audio recording
+- `GET /audio/status` - Get audio status
+- `POST /nfc/read` - Read NFC tag
+- `POST /nfc/write` - Write NFC tag
+- `GET /nfc/status` - Get NFC status
+- `POST /led/pattern` - Change LED pattern
 
-## 🚦 Estados de los LEDs RGB
+### WebSocket Events
+**Sent to backend**:
+- Audio data
+- Button events
+- NFC events
+- State changes
+- Hardware metrics
 
-Los LEDs integrados proporcionan feedback visual sobre el estado del asistente:
+**Received from backend**:
+- Control commands
+- Configuration updates
+- LED patterns
 
--   **Idle**: Luz azul muy tenue y estática. El asistente está en espera.
--   **Wakeup**: Animación de "despertar" con los colores base. Ocurre al detectar la wake word.
--   **Listening**: Luz constante con los colores base. El asistente está grabando el comando.
--   **Thinking**: Los colores rotan. El asistente ha enviado el audio y está esperando respuesta.
--   **Speaking**: Efecto de pulsación. El asistente está reproduciendo una respuesta de audio (TTS).
--   **Error**: Parpadeo en color rojo. Ha ocurrido un error en alguna parte del proceso.
--   **Off**: LEDs apagados.
+## 🎨 LED States
 
-## 🚀 Uso
+The RGB LEDs indicate different assistant states:
 
-Este servicio está diseñado para ser ejecutado como un contenedor de Docker a través del `docker-compose.yml` principal del proyecto. La configuración de Docker se encarga de mapear los dispositivos necesarios (`/dev/snd`, `/dev/gpiomem`, `/dev/spidev*`) dentro del contenedor.
+- 🔵 **Blue (pulsing)**: Idle/Available
+- 🟢 **Green (solid)**: Listening
+- 🟡 **Yellow (spinning)**: Processing
+- 🔴 **Red (blinking)**: Error
+- 🟣 **Purple**: Wake word detected
+
+## 🧪 Testing
+
+### Run Basic Tests
+```bash
+# Test configuration and basic functionality
+python app/tests/test_basic.py
+
+# Test hardware components
+python scripts/test_hardware.py
+```
+
+### Hardware Tests
+```bash
+# Test audio recording
+arecord -D plughw:X,0 -f S16_LE -r 16000 -d 5 test.wav
+
+# Test I2C
+i2cdetect -y 1
+
+# Test SPI
+ls /dev/spidev*
+```
+
+## 📊 Monitoring
+
+### Health Checks
+- HTTP health endpoint: `GET /health`
+- Docker health check configured
+- Automatic restart on failure
+
+### Logging
+- Structured JSON logging
+- Log rotation (10MB files, 5 backups)
+- Real-time log streaming
+
+### Metrics
+- Audio latency
+- Button press counts
+- NFC read/write operations
+- LED pattern changes
+- System resource usage
+
+## 🔧 Troubleshooting
+
+### Common Issues
+
+1. **Audio device not found**
+   ```bash
+   # Check available audio devices
+   aplay -l
+   arecord -l
+   
+   # Install ReSpeaker driver
+   # Follow: https://github.com/respeaker/seeed-voicecard
+   ```
+
+2. **I2C permission denied**
+   ```bash
+   sudo usermod -a -G i2c $USER
+   # Reboot required
+   ```
+
+3. **SPI not working**
+   ```bash
+   # Enable SPI
+   sudo raspi-config nonint do_spi 0
+   sudo reboot
+   ```
+
+4. **GPIO permission denied**
+   ```bash
+   sudo usermod -a -G gpio $USER
+   # Reboot required
+   ```
+
+### Debug Mode
+Enable debug logging:
+```bash
+DEBUG_MODE=true
+LOG_LEVEL=DEBUG
+```
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Test thoroughly
+5. Submit a pull request
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- [Porcupine](https://github.com/Picovoice/porcupine) for wake word detection
+- [ReSpeaker](https://github.com/respeaker/seeed-voicecard) for audio HAT support
+- [FastAPI](https://fastapi.tiangolo.com/) for web framework

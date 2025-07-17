@@ -1,26 +1,107 @@
-# Dockerfile para Raspberry Pi 32-bit - Alpine Linux
-FROM python:3.11-alpine
+# Dockerfile para PuertoCho Assistant Hardware Service
+# Optimizado para Raspberry Pi 4B con ARM64
 
-# Configurar variables de entorno
-ENV PIP_NO_CACHE_DIR=1
+# Etapa de compilación para descargar artefactos
+FROM python:3.11-slim-bullseye as build-stage
+
+# Instalar wget
+RUN apt-get update && apt-get install -y wget && rm -rf /var/lib/apt/lists/*
+
+# Crear directorio para modelos
+WORKDIR /tmp/models
+
+# Descargar modelos de Porcupine (ejemplos, reemplaza con tus URLs)
+# RUN wget -q https://github.com/Picovoice/porcupine/raw/master/resources/keyword_files/raspberry-pi/porcupine_raspberry-pi.ppn -O porcupine.ppn
+# RUN wget -q https://github.com/Picovoice/porcupine/raw/master/resources/keyword_files/raspberry-pi/blueberry_raspberry-pi.ppn -O blueberry.ppn
+
+# --- Etapa final ---
+FROM python:3.11-slim-bullseye
+
+# Metadatos del contenedor
+LABEL maintainer="PuertOcho <puertocho@example.com>"
+LABEL version="1.0.0"
+LABEL description="Hardware service for PuertoCho Assistant on Raspberry Pi"
+
+# Variables de entorno
 ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=Europe/Madrid
 
-# Instalar dependencias del sistema con apk (Alpine)
-RUN apk add --no-cache \
+# Crear usuario no-root para seguridad
+RUN groupadd -r puertocho && useradd -r -g puertocho puertocho
+
+# Actualizar sistema y instalar dependencias del sistema
+RUN apt-get update && apt-get install -y \
+    # Audio dependencies
+    alsa-utils \
+    libasound2-dev \
+    pulseaudio \
+    pulseaudio-utils \
+    portaudio19-dev \
+    # Hardware dependencies
+    i2c-tools \
+    libi2c-dev \
+    spi-tools \
+    # Build dependencies
+    build-essential \
     gcc \
     g++ \
-    musl-dev \
-    alsa-lib-dev \
+    pkg-config \
     libffi-dev \
-    portaudio-dev \
-    linux-headers \
-    && rm -rf /var/cache/apk/*
+    # System utilities
+    curl \
+    wget \
+    git \
+    nano \
+    # Python dependencies
+    python3-dev \
+    python3-pip \
+    # Cleanup
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
+# Configurar timezone
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+
+# Crear directorio de trabajo
 WORKDIR /app
+
+# Copiar requirements y instalar dependencias Python
 COPY app/requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
-    pip install --no-cache-dir --prefer-binary -r requirements.txt
+RUN pip install --upgrade pip && \
+    pip install -r requirements.txt
 
-COPY app /app
+# Crear estructura de directorios
+RUN mkdir -p /app/logs \
+    /app/config \
+    /app/data \
+    /app/models \
+    /app/scripts \
+    /app/tests
 
-CMD ["python", "-u", "main.py"]
+# Copiar código fuente
+COPY app/ ./
+
+# Copiar modelos de Porcupine (si existen) desde la etapa de compilación
+COPY --from=build-stage /tmp/models/ ./models/
+
+# Copiar scripts
+COPY scripts/ ./scripts/
+
+# Configurar permisos
+RUN mkdir -p /app/logs && \
+    chown -R puertocho:puertocho /app && \
+    chmod +x /app/scripts/*.sh 2>/dev/null || true
+
+# Exponer puertos
+EXPOSE 8080
+EXPOSE 8081
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
+
+# Configurar punto de entrada
+USER puertocho
+CMD ["python", "main.py"]
