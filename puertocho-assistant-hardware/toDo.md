@@ -22,8 +22,9 @@ El servicio `puertocho-assistant-hardware` es responsable de manejar todo el har
 - [x] **1.6** Configurar logging y manejo de errores básico
 
 ### Hito 2: Configuración de Audio y ReSpeaker
-- [ ] **2.1** Configurar driver del ReSpeaker 2-Mic Pi HAT V1.0
-- [ ] **2.2** Implementar detección automática de dispositivos de audio
+- [x] **2.1** Configurar driver del ReSpeaker 2-Mic Pi HAT V1.0
+- [x] **2.2** Implementar detección automática de dispositivos de audio
+- [x] **2.2.1** Ejecutar script para verificar la detección de audio
 - [ ] **2.3** Crear clase `AudioManager` para grabación/reproducción
 - [ ] **2.4** Implementar configuración de audio (sample rate, channels, formato)
 - [ ] **2.5** Añadir pruebas de audio para verificar funcionamiento

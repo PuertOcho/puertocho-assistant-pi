@@ -31,6 +31,9 @@ ENV TZ=Europe/Madrid
 # Crear usuario no-root para seguridad
 RUN groupadd -r puertocho && useradd -r -g puertocho puertocho
 
+# Agregar usuario al grupo audio para acceso a dispositivos de audio
+RUN usermod -a -G audio puertocho
+
 # Actualizar sistema y instalar dependencias del sistema
 RUN apt-get update && apt-get install -y \
     # Audio dependencies
@@ -80,18 +83,18 @@ RUN mkdir -p /app/logs \
     /app/scripts \
     /app/tests
 
-# Copiar código fuente
-COPY app/ ./
+# Copiar scripts primero
+COPY scripts/ /app/scripts/
+
+# Copiar código fuente de la aplicación
+COPY app/ /app/
 
 # Copiar modelos de Porcupine (si existen) desde la etapa de compilación
-COPY --from=build-stage /tmp/models/ ./models/
-
-# Copiar scripts
-COPY scripts/ ./scripts/
+COPY --from=build-stage /tmp/models/ /app/models/
 
 # Configurar permisos
-RUN mkdir -p /app/logs && \
-    chown -R puertocho:puertocho /app && \
+RUN chown -R puertocho:puertocho /app && \
+    chmod +x /app/scripts/*.py 2>/dev/null || true && \
     chmod +x /app/scripts/*.sh 2>/dev/null || true
 
 # Exponer puertos
