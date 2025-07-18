@@ -25,9 +25,13 @@ El servicio `puertocho-assistant-hardware` es responsable de manejar todo el har
 - [x] **2.1** Configurar driver del ReSpeaker 2-Mic Pi HAT V1.0
 - [x] **2.2** Implementar detección automática de dispositivos de audio
 - [x] **2.2.1** Ejecutar script para verificar la detección de audio
-- [ ] **2.3** Crear clase `AudioManager` para grabación/reproducción
-- [ ] **2.4** Implementar configuración de audio (sample rate, channels, formato)
-- [ ] **2.5** Añadir pruebas de audio para verificar funcionamiento
+- [x] **2.3** Crear clase `AudioManager` para grabación/reproducción
+- [x] **2.4** Implementar configuración de audio (sample rate, channels, formato)
+- [x] **2.5** Añadir pruebas de audio para verificar funcionamiento
+  - [x] **2.5.1** Tests unitarios completos (`test_audio.py`)
+  - [x] **2.5.2** Script interactivo (`test_audio_manager.py`)
+  - [x] **2.5.3** Guardado de audio en archivos WAV
+  - [x] **2.5.4** Reproducción de audio guardado
 - [ ] **2.6** Implementar buffer circular para audio en tiempo real
 
 ### Hito 3: Control de LEDs RGB (APA102)

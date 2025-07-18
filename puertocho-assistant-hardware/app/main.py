@@ -63,7 +63,15 @@ class HardwareService:
         """Initialize hardware components"""
         log_hardware_event("initializing_components")
         
-        # TODO: Initialize audio manager
+        # Initialize audio manager with configuration
+        from core.audio_manager import AudioManager
+        self.audio_manager = AudioManager()
+        log_hardware_event("audio_manager_initialized", {
+            "sample_rate": config.audio.sample_rate,
+            "channels": config.audio.channels,
+            "device_name": config.audio.device_name
+        })
+        
         # TODO: Initialize LED controller
         # TODO: Initialize button handler
         # TODO: Initialize NFC manager
