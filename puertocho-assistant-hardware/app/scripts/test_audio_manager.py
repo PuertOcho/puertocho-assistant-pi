@@ -217,6 +217,16 @@ def test_audio_devices_only():
             
             print(f"   [{i:2}] {device['name']:<30} ({', '.join(status)})")
         
+        # Información detallada de dispositivos de entrada
+        print(f"\n🎤 Dispositivos de entrada detallados:")
+        for i, device in enumerate(input_devices):
+            print(f"   [{i}] Nombre: {device['name']}")
+            print(f"       Canales de entrada: {device['max_input_channels']}")
+            print(f"       Sample rate por defecto: {device['default_samplerate']}")
+            if 'hostapi' in device:
+                print(f"       Host API: {device['hostapi']}")
+            print()
+        
         # Buscar el dispositivo configurado
         print(f"\n🔍 Buscando dispositivo configurado: '{config.audio.device_name}'")
         audio_manager = AudioManager()
@@ -227,6 +237,14 @@ def test_audio_devices_only():
             print(f"   ✅ Encontrado en índice {found_device}: {device['name']}")
         else:
             print(f"   ⚠️  No encontrado, se usará dispositivo por defecto")
+            
+            # Sugerir dispositivos candidatos para ReSpeaker
+            print(f"\n💡 Dispositivos candidatos para ReSpeaker 2-Mic:")
+            for i, device in enumerate(input_devices):
+                # ReSpeaker típicamente tiene 2 canales de entrada
+                if device['max_input_channels'] == 2:
+                    print(f"   🎯 [{i}] {device['name']} - {device['max_input_channels']} canales (CANDIDATO)")
+                    print(f"       Para usar este dispositivo, configure: AUDIO_DEVICE_NAME=\"{device['name']}\"")
         
         return True
         
