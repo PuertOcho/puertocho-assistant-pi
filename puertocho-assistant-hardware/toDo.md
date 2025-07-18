@@ -32,19 +32,18 @@ El servicio `puertocho-assistant-hardware` es responsable de manejar todo el har
   - [x] **2.5.2** Script interactivo (`test_audio_manager.py`)
   - [x] **2.5.3** Guardado de audio en archivos WAV
   - [x] **2.5.4** Reproducción de audio guardado
-- [ ] **2.6** Implementar buffer circular para audio en tiempo real
 
 ### Hito 3: Control de LEDs RGB (APA102)
-- [ ] **3.1** Implementar clase `LEDController` para manejar LEDs APA102
-- [ ] **3.2** Configurar comunicación SPI para LEDs RGB
-- [ ] **3.3** Crear patrones de LED para diferentes estados:
+- [x] **3.1** Implementar clase `LEDController` para manejar LEDs APA102
+- [x] **3.2** Configurar comunicación SPI para LEDs RGB
+- [x] **3.3** Crear patrones de LED para diferentes estados:
   - Disponible (azul pulsante)
   - Escuchando (verde sólido)
   - Procesando (amarillo giratorio)
   - Error (rojo parpadeante)
-- [ ] **3.4** Implementar transiciones suaves entre estados
-- [ ] **3.5** Añadir control de brillo adaptativo
-- [ ] **3.6** Crear scripts de prueba para cada patrón
+- [x] **3.4** Implementar transiciones suaves entre estados
+- [x] **3.5** Añadir control de brillo adaptativo
+- [x] **3.6** Crear scripts de prueba para cada patrón
 
 ### Hito 4: Detección de Botón y GPIO
 - [ ] **4.1** Implementar clase `ButtonHandler` para GPIO17
@@ -57,6 +56,7 @@ El servicio `puertocho-assistant-hardware` es responsable de manejar todo el har
 ### Hito 5: Wake Word Detection (Porcupine)
 - [ ] **5.1** Configurar Porcupine con modelo personalizado "Puerto-ocho"
 - [ ] **5.2** Implementar clase `WakeWordDetector`
+- [ ] **5.2.1** Implementar buffer circular para audio en tiempo real
 - [ ] **5.3** Optimizar sensibilidad para entorno doméstico
 - [ ] **5.4** Implementar filtros de audio para mejorar detección
 - [ ] **5.5** Añadir logging de eventos de wake word

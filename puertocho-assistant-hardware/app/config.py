@@ -48,10 +48,9 @@ class GPIOConfig:
 class LEDConfig:
     """Configuración de LEDs"""
     count: int = int(os.getenv("LED_COUNT", "3"))
-    spi_bus: int = int(os.getenv("LED_SPI_BUS", "0"))
-    spi_device: int = int(os.getenv("LED_SPI_DEVICE", "0"))
     brightness: int = int(os.getenv("LED_BRIGHTNESS", "128"))
     animation_speed: float = float(os.getenv("LED_ANIMATION_SPEED", "0.1"))
+    simulate: bool = os.getenv("LED_SIMULATE", "false").lower() == "true"
 
 @dataclass
 class NFCConfig:
@@ -136,6 +135,9 @@ def validate_config():
     
     if config.led.brightness < 0 or config.led.brightness > 255:
         errors.append("LED_BRIGHTNESS must be between 0 and 255")
+    
+    if config.led.animation_speed <= 0:
+        errors.append("LED_ANIMATION_SPEED must be positive")
     
     if errors:
         raise ValueError(f"Configuration errors: {'; '.join(errors)}")
