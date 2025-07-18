@@ -74,7 +74,6 @@ services:
       - /etc/asound.conf:/etc/asound.conf:ro
       - /lib/modules:/lib/modules:ro
       - /etc/modprobe.d:/etc/modprobe.d:ro
-      - /proc/asound:/proc/asound:ro
       - puertocho-logs:/app/logs
       - puertocho-config:/app/config
     devices:
