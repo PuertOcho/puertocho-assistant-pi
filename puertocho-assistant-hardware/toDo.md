@@ -11,6 +11,18 @@ El servicio `puertocho-assistant-hardware` es responsable de manejar todo el har
 - **Detección de silencio** para parar grabación automáticamente
 - **Comunicación HTTP/WebSocket** con el backend
 
+## 🏛️ Arquitectura del Sistema
+
+Para asegurar la mantenibilidad y escalabilidad del proyecto, se ha decidido adoptar una arquitectura basada en una **Máquina de Estados Centralizada (`StateManager`)**.
+
+- **`StateManager`**: Orquesta el flujo de la aplicación. Gestiona los estados (`IDLE`, `LISTENING`, `PROCESSING`, etc.) y coordina las acciones entre los diferentes módulos de hardware.
+- **`AudioManager`**: Provee un flujo de audio constante. No conoce el estado de la aplicación, simplemente emite los datos del micrófono.
+- **Módulos de Hardware (`ButtonHandler`, `WakeWordDetector`, `VADHandler`, `LEDController`)**: Actúan como componentes desacoplados.
+    - Notifican eventos al `StateManager` (ej: "botón presionado", "wake word detectado").
+    - Reciben comandos del `StateManager` (ej: "cambiar patrón de LED").
+
+Esta arquitectura promueve el bajo acoplamiento y la alta cohesión, facilitando las pruebas y futuras modificaciones. La implementación de los hitos se realizará siguiendo este patrón.
+
 ## 🎯 Hitos del Proyecto
 
 ### Hito 1: Configuración Base del Contenedor
@@ -49,26 +61,28 @@ El servicio `puertocho-assistant-hardware` es responsable de manejar todo el har
 - [ ] **4.1** Implementar clase `ButtonHandler` para GPIO17
 - [ ] **4.2** Configurar interrupciones para detección de pulsaciones
 - [ ] **4.3** Implementar debouncing para evitar falsas activaciones
-- [ ] **4.4** Manejar pulsación corta (activar/desactivar grabación)
-- [ ] **4.5** Manejar pulsación larga (funciones especiales)
-- [ ] **4.6** Integrar con sistema de estados del asistente
+- [ ] **4.4** Manejar pulsación corta y larga
+- [ ] **4.5** Notificar al StateManager los eventos de botón (corta/larga) a través de un callback
+- [ ] **4.6** Integrar con el `StateManager` para iniciar/detener la escucha manualmente
 
 ### Hito 5: Wake Word Detection (Porcupine)
 - [ ] **5.1** Configurar Porcupine con modelo personalizado "Puerto-ocho"
-- [ ] **5.2** Implementar clase `WakeWordDetector`
+- [ ] **5.2** Implementar clase `WakeWordDetector` que procesa chunks de audio
 - [ ] **5.2.1** Implementar buffer circular para audio en tiempo real
 - [ ] **5.3** Optimizar sensibilidad para entorno doméstico
 - [ ] **5.4** Implementar filtros de audio para mejorar detección
 - [ ] **5.5** Añadir logging de eventos de wake word
 - [ ] **5.6** Crear modo de calibración para ajustar sensibilidad
+- [ ] **5.7** Integrar con `StateManager`: recibirá audio en estado `IDLE` y notificará detecciones
 
 ### Hito 6: Detección de Silencio (VAD)
 - [ ] **6.1** Implementar Voice Activity Detection con WebRTC VAD
 - [ ] **6.2** Configurar umbrales de silencio dinámicos
-- [ ] **6.3** Implementar timeout configurable para fin de grabación
+- [ ] **6.3** Notificar al `StateManager` el inicio y fin del habla para controlar la grabación
 - [ ] **6.4** Añadir filtros de ruido de fondo
 - [ ] **6.5** Optimizar para diferentes niveles de ruido ambiental
 - [ ] **6.6** Crear sistema de calibración automática
+- [ ] **6.7** Integrar con `StateManager`: recibirá audio en estado `LISTENING`
 
 ### Hito 7: Módulo NFC (I2C)
 - [ ] **7.1** Configurar comunicación I2C para módulo NFC
@@ -84,18 +98,15 @@ El servicio `puertocho-assistant-hardware` es responsable de manejar todo el har
 - [ ] **7.5** Implementar sistema de acciones programables
 - [ ] **7.6** Crear interfaz para configurar acciones NFC
 
-### Hito 8: Sistema de Estados del Asistente
-- [ ] **8.1** Implementar máquina de estados centralizada
-- [ ] **8.2** Estados principales:
-  - IDLE (disponible)
-  - LISTENING (escuchando)
-  - PROCESSING (procesando)
-  - SPEAKING (hablando)
-  - ERROR (error)
-- [ ] **8.3** Implementar transiciones entre estados
-- [ ] **8.4** Sincronizar LEDs con estados
-- [ ] **8.5** Manejar timeouts y recuperación de errores
-- [ ] **8.6** Logging detallado de cambios de estado
+### Hito 8: Sistema de Estados del Asistente (StateManager)
+- [ ] **8.1** Implementar la clase `StateManager` en `app/core/state_manager.py`.
+- [ ] **8.2** Definir los estados principales como un Enum: `IDLE`, `LISTENING`, `PROCESSING`, `SPEAKING`, `ERROR`.
+- [ ] **8.3** Implementar el método `handle_audio_chunk` que distribuirá el audio al componente correspondiente según el estado actual (`WakeWordDetector` o `VADHandler`).
+- [ ] **8.4** Crear la lógica de transiciones entre estados (ej: `IDLE` -> `LISTENING` al detectar wake word o botón).
+- [ ] **8.5** Integrar `LEDController` para que los patrones de LED se sincronicen automáticamente con los cambios de estado.
+- [ ] **8.6** Implementar un sistema de callbacks o eventos para que los manejadores de hardware notifiquen al `StateManager`.
+- [ ] **8.7** Añadir logging detallado para cada transición de estado y evento recibido.
+- [ ] **8.8** Manejar timeouts y recuperación de errores básicos (ej: volver a `IDLE` si algo falla).
 
 ### Hito 9: API HTTP y Endpoints
 - [ ] **9.1** Configurar FastAPI para endpoints HTTP
