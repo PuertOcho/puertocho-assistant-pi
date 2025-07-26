@@ -56,6 +56,7 @@ services:
     container_name: puertocho-assistant-hardware
     privileged: true
     network_mode: host
+    user: "0:0"  # Ejecutar como root para acceso a GPIO
     env_file:
       - .env
     environment:
@@ -81,6 +82,8 @@ services:
       - /dev/spidev0.0:/dev/spidev0.0
       - /dev/spidev0.1:/dev/spidev0.1
       - /dev/snd:/dev/snd
+      - /dev/gpiomem:/dev/gpiomem
+      - /dev/mem:/dev/mem
     depends_on:
       - puertocho-backend
     healthcheck:

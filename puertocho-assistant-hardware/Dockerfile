@@ -34,6 +34,15 @@ RUN groupadd -r puertocho && useradd -r -g puertocho puertocho
 # Agregar usuario al grupo audio para acceso a dispositivos de audio
 RUN usermod -a -G audio puertocho
 
+# Agregar usuario al grupo gpio para acceso a dispositivos GPIO
+RUN groupadd -f gpio && usermod -a -G gpio puertocho
+
+# Agregar usuario al grupo spi para acceso a dispositivos SPI
+RUN groupadd -f spi && usermod -a -G spi puertocho
+
+# Agregar usuario al grupo i2c para acceso a dispositivos I2C
+RUN groupadd -f i2c && usermod -a -G i2c puertocho
+
 # Actualizar sistema y instalar dependencias del sistema
 RUN apt-get update && apt-get install -y \
     # Audio dependencies
@@ -106,5 +115,6 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8080/health || exit 1
 
 # Configurar punto de entrada
-USER puertocho
+# Para acceso a GPIO necesitamos ejecutar como root
+# USER puertocho
 CMD ["python", "main.py"]
