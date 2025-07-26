@@ -58,12 +58,16 @@ Esta arquitectura promueve el bajo acoplamiento y la alta cohesión, facilitando
 - [x] **3.6** Crear scripts de prueba para cada patrón
 
 ### Hito 4: Detección de Botón y GPIO
-- [ ] **4.1** Implementar clase `ButtonHandler` para GPIO17
-- [ ] **4.2** Configurar interrupciones para detección de pulsaciones
-- [ ] **4.3** Implementar debouncing para evitar falsas activaciones
-- [ ] **4.4** Manejar pulsación corta y larga
-- [ ] **4.5** Notificar al StateManager los eventos de botón (corta/larga) a través de un callback
-- [ ] **4.6** Integrar con el `StateManager` para iniciar/detener la escucha manualmente
+- [x] **4.1** Implementar clase `ButtonHandler` para GPIO17
+- [x] **4.2** Configurar interrupciones para detección de pulsaciones
+- [x] **4.3** Implementar debouncing para evitar falsas activaciones
+- [x] **4.4** Manejar pulsación corta y larga
+- [x] **4.5** Notificar al StateManager los eventos de botón (corta/larga) a través de un callback
+- [x] **4.6** Integrar con el `StateManager` para iniciar/detener la escucha manualmente
+- [x] **4.7** Implementar modo simulación para testing sin hardware
+- [x] **4.8** Crear script de pruebas completo (`test_button_handler.py`)
+- [x] **4.9** Configurar permisos GPIO en contenedor Docker
+- [x] **4.10** Validar funcionamiento en hardware real
 
 ### Hito 5: Wake Word Detection (Porcupine)
 - [ ] **5.1** Configurar Porcupine con modelo personalizado "Puerto-ocho"
@@ -264,18 +268,34 @@ puertocho-assistant-hardware/
 
 ## 🚀 Próximos Pasos
 
-1. **Comenzar con Hito 1**: Configurar la base del contenedor
-2. **Priorizar Hitos 2-4**: Establecer funcionalidades básicas de hardware
-3. **Implementar Hitos 5-6**: Añadir inteligencia de audio
-4. **Desarrollar Hitos 7-8**: Completar funcionalidades avanzadas
-5. **Integrar Hitos 9-11**: Conectar con el backend
-6. **Finalizar Hitos 12-15**: Pulir para producción
+1. **✅ Hito 1**: Configuración base del contenedor - **COMPLETADO**
+2. **✅ Hito 2**: Configuración de Audio y ReSpeaker - **COMPLETADO**
+3. **✅ Hito 3**: Control de LEDs RGB (APA102) - **COMPLETADO**
+4. **✅ Hito 4**: Detección de Botón y GPIO - **COMPLETADO**
+5. **🔄 Próximo**: Implementar Hito 5 (Wake Word Detection)
+6. **Planificado**: Desarrollar Hitos 6-8 (VAD, NFC, StateManager)
+7. **Futuro**: Integrar Hitos 9-11 (API, WebSocket, Backend)
+8. **Final**: Finalizar Hitos 12-15 (Configuración, Testing, Producción)
 
 ## 📝 Notas Importantes
 
-- El contenedor debe ejecutarse con `privileged: true` para acceso al hardware
-- Usar `network_mode: host` para comunicación eficiente
-- Configurar correctamente I2C, SPI y GPIO en el sistema host
-- Considerar latencia y rendimiento en tiempo real
-- Implementar manejo robusto de errores de hardware
-- Documentar todas las configuraciones y calibraciones
+- ✅ El contenedor debe ejecutarse con `privileged: true` para acceso al hardware
+- ✅ Usar `network_mode: host` para comunicación eficiente  
+- ✅ Configurar correctamente I2C, SPI y GPIO en el sistema host
+- ✅ Permisos GPIO resueltos ejecutando contenedor como root (user: "0:0")
+- ✅ ButtonHandler implementado con soporte completo para hardware real y simulación
+- 🔄 Considerar latencia y rendimiento en tiempo real para próximos módulos
+- 🔄 Implementar manejo robusto de errores de hardware
+- 🔄 Documentar todas las configuraciones y calibraciones
+
+### 🎯 Estado Actual del Proyecto
+**Hardware Base**: ✅ COMPLETADO (Hitos 1-4)
+- Contenedor Docker configurado y funcionando
+- Audio ReSpeaker operativo con grabación/reproducción
+- LEDs RGB APA102 con patrones dinámicos
+- Detección de botón GPIO con eventos y callbacks
+
+**Próximo Objetivo**: 🚀 Wake Word Detection (Hito 5)
+- Integrar Porcupine para detección "Puerto-ocho"
+- Implementar buffer circular de audio
+- Crear sistema de calibración de sensibilidad
