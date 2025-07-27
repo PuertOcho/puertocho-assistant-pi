@@ -70,14 +70,14 @@ Esta arquitectura promueve el bajo acoplamiento y la alta cohesión, facilitando
 - [x] **4.10** Validar funcionamiento en hardware real
 
 ### Hito 5: Wake Word Detection (Porcupine)
-- [ ] **5.1** Configurar Porcupine con modelo personalizado "Puerto-ocho"
-- [ ] **5.2** Implementar clase `WakeWordDetector` que procesa chunks de audio
-- [ ] **5.2.1** Implementar buffer circular para audio en tiempo real
-- [ ] **5.3** Optimizar sensibilidad para entorno doméstico
-- [ ] **5.4** Implementar filtros de audio para mejorar detección
-- [ ] **5.5** Añadir logging de eventos de wake word
-- [ ] **5.6** Crear modo de calibración para ajustar sensibilidad
-- [ ] **5.7** Integrar con `StateManager`: recibirá audio en estado `IDLE` y notificará detecciones
+- [x] **5.1** Configurar Porcupine con modelo personalizado "Puerto-ocho"
+- [x] **5.2** Implementar clase `WakeWordDetector` que procesa chunks de audio
+- [x] **5.2.1** Implementar buffer circular para audio en tiempo real
+- [x] **5.3** Optimizar sensibilidad para entorno doméstico
+- [x] **5.4** Implementar filtros de audio para mejorar detección
+- [x] **5.5** Añadir logging de eventos de wake word
+- [x] **5.6** Crear modo de calibración para ajustar sensibilidad
+- [x] **5.7** Integrar con `StateManager`: recibirá audio en estado `IDLE` y notificará detecciones
 
 ### Hito 6: Detección de Silencio (VAD)
 - [ ] **6.1** Implementar Voice Activity Detection con WebRTC VAD
