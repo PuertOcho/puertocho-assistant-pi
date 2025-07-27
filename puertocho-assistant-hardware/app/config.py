@@ -16,7 +16,7 @@ load_dotenv()
 class AudioConfig:
     """Configuración de audio"""
     device_name: str = os.getenv("AUDIO_DEVICE_NAME", "seeed-voicecard")
-    sample_rate: int = int(os.getenv("AUDIO_SAMPLE_RATE", "16000"))
+    sample_rate: int = int(os.getenv("AUDIO_SAMPLE_RATE", "44100"))
     channels: int = int(os.getenv("AUDIO_CHANNELS", "2"))
     chunk_size: int = int(os.getenv("AUDIO_CHUNK_SIZE", "1024"))
     format: str = os.getenv("AUDIO_FORMAT", "int16")
@@ -26,8 +26,17 @@ class AudioConfig:
 class WakeWordConfig:
     """Configuración del wake word"""
     model_path: str = os.getenv("WAKE_WORD_MODEL_PATH", "/app/models/Puerto-ocho_es_raspberry-pi_v3_0_0.ppn")
+    params_path: str = os.getenv("WAKE_WORD_PARAMS_PATH", "/app/models/porcupine_params_es.pv")
     sensitivity: float = float(os.getenv("WAKE_WORD_SENSITIVITY", "0.5"))
     access_key: str = os.getenv("PORCUPINE_ACCESS_KEY", "")
+    
+    # Buffer configuration
+    buffer_duration_seconds: float = float(os.getenv("WAKE_WORD_BUFFER_DURATION", "3.0"))
+    processing_chunk_size: int = int(os.getenv("WAKE_WORD_CHUNK_SIZE", "512"))
+    
+    # Dual microphone configuration
+    process_both_channels: bool = os.getenv("WAKE_WORD_DUAL_MIC", "true").lower() == "true"
+    require_both_channels: bool = os.getenv("WAKE_WORD_REQUIRE_BOTH", "false").lower() == "true"
 
 @dataclass
 class VADConfig:
@@ -117,6 +126,15 @@ def validate_config():
     
     if not os.path.exists(config.wake_word.model_path):
         errors.append(f"Wake word model not found: {config.wake_word.model_path}")
+    
+    if not os.path.exists(config.wake_word.params_path):
+        errors.append(f"Wake word params not found: {config.wake_word.params_path}")
+    
+    if config.wake_word.sensitivity < 0.0 or config.wake_word.sensitivity > 1.0:
+        errors.append("WAKE_WORD_SENSITIVITY must be between 0.0 and 1.0")
+    
+    if config.wake_word.buffer_duration_seconds <= 0:
+        errors.append("WAKE_WORD_BUFFER_DURATION must be positive")
     
     # Validar audio
     if config.audio.sample_rate <= 0:

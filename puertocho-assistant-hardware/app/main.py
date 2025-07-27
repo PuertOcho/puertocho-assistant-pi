@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from config import config, validate_config
 from utils.logger import logger, log_hardware_event
+from core.led_controller import LEDController, LEDState
 
 class HardwareService:
     """Main hardware service class"""
@@ -21,7 +22,8 @@ class HardwareService:
     def __init__(self):
         self.running = False
         self.tasks = []
-    
+        self.main_loop = asyncio.get_event_loop()
+
     async def start(self):
         """Start the hardware service"""
         try:
@@ -49,6 +51,17 @@ class HardwareService:
         log_hardware_event("service_stopping")
         self.running = False
         
+        # Stop components in reverse order
+        if hasattr(self, 'audio_manager'):
+            self.audio_manager.stop_recording()
+            
+        if hasattr(self, 'wake_word_detector'):
+            self.wake_word_detector.stop()
+            
+        if hasattr(self, 'led_controller'):
+            self.led_controller.set_state(LEDState.OFF)
+            self.led_controller.stop_animation()
+        
         # Cancel all tasks
         for task in self.tasks:
             task.cancel()
@@ -63,6 +76,14 @@ class HardwareService:
         """Initialize hardware components"""
         log_hardware_event("initializing_components")
         
+        self.led_controller = LEDController()
+        self.led_controller.start_animation()
+        self.led_controller.set_state(LEDState.IDLE)  # Estado inicial
+        log_hardware_event("led_controller_initialized", {
+            "num_leds": self.led_controller.num_leds,
+            "brightness": self.led_controller.brightness
+        })
+        
         # Initialize audio manager with configuration
         from core.audio_manager import AudioManager
         self.audio_manager = AudioManager()
@@ -72,15 +93,58 @@ class HardwareService:
             "device_name": config.audio.device_name
         })
         
-        # TODO: Initialize LED controller
+        # Initialize wake word detector
+        from core.wake_word_detector import WakeWordDetector
+        self.wake_word_detector = WakeWordDetector(on_wake_word=self._on_wake_word_detected)
+        self.wake_word_detector.start()
+        log_hardware_event("wake_word_detector_initialized", {
+            "model_path": config.wake_word.model_path,
+            "sensitivity": config.wake_word.sensitivity
+        })
+        
+        # Start audio recording with wake word processing
+        self.audio_manager.start_recording(self._audio_callback)
+        log_hardware_event("audio_recording_started")
+        
         # TODO: Initialize button handler
         # TODO: Initialize NFC manager
-        # TODO: Initialize wake word detector
         # TODO: Initialize VAD
         # TODO: Initialize HTTP server
         # TODO: Initialize WebSocket client
         
         log_hardware_event("components_initialized")
+    
+    def _audio_callback(self, audio_data, frames, status):
+        """Callback para procesar chunks de audio"""
+        if hasattr(self, 'wake_word_detector'):
+            self.wake_word_detector.process_audio_chunk(audio_data)
+    
+    def _on_wake_word_detected(self, event):
+        """Callback cuando se detecta wake word"""
+        logger.info(f"🔥 Wake word detected on channel {event.channel}!")
+        
+        # Cambiar LEDs a estado de listening
+        if hasattr(self, 'led_controller'):
+            self.led_controller.set_state(LEDState.LISTENING)
+        
+        log_hardware_event("wake_word_detected", {
+            "channel": event.channel,
+            "keyword_index": event.keyword_index,
+            "timestamp": event.timestamp
+        })
+        
+        # Por ahora, después de 3 segundos volvemos al estado idle
+        if self.main_loop.is_running():
+            self.main_loop.call_soon_threadsafe(
+                lambda: self.main_loop.create_task(self._return_to_idle_after_delay(3.0))
+            )
+    
+    async def _return_to_idle_after_delay(self, delay_seconds: float):
+        """Vuelve al estado idle después de un delay"""
+        await asyncio.sleep(delay_seconds)
+        if hasattr(self, 'led_controller'):
+            self.led_controller.set_state(LEDState.IDLE)
+        logger.info("Returned to idle state")
 
 def setup_signal_handlers(service: HardwareService):
     """Setup signal handlers for graceful shutdown"""

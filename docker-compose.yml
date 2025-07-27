@@ -58,7 +58,7 @@ services:
     network_mode: host
     user: "0:0"  # Ejecutar como root para acceso a GPIO
     env_file:
-      - .env
+      - ./puertocho-assistant-hardware/.env
     environment:
       - PYTHONUNBUFFERED=1
       - HARDWARE_LOG_LEVEL=INFO
