@@ -79,10 +79,12 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 # Crear directorio de trabajo
 WORKDIR /app
 
-# Copiar requirements y instalar dependencias Python
-COPY app/requirements.txt .
+
+# Copiar todos los requirements segmentados y luego instalar
+COPY app/requirements/requirements*.txt /app/requirements/
+COPY app/requirements/requirements.txt /app/requirements/requirements.txt
 RUN pip install --upgrade pip && \
-    pip install -r requirements.txt
+    pip install -r /app/requirements/requirements.txt
 
 # Crear estructura de directorios
 RUN mkdir -p /app/logs \

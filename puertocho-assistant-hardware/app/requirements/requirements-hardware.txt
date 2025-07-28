@@ -1,0 +1,3 @@
+# Hardware control
+RPi.GPIO>=0.7.0
+spidev>=3.5
