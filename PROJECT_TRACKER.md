@@ -21,32 +21,37 @@
 
 ## 🎯 Tareas para Conectar Hardware y Backend
 
-### 📡 FASE 1: API HTTP en Hardware (Hito 9)
+### 📡 FASE 1: API HTTP en Hardware (Hito 9) ✅ COMPLETADO
 
-- [ ] **HW-API-01**: Configurar FastAPI en `app/api/http_server.py`
+- [x] **HW-API-01**: Configurar FastAPI en `app/api/http_server.py` ✅
   - Implementar estructura base del servidor
   - Configurar CORS y middlewares necesarios
   - Integrar con el StateManager existente
 
-- [ ] **HW-API-02**: Implementar endpoints básicos de estado y salud
+- [x] **HW-API-02**: Implementar endpoints básicos de estado y salud ✅
   - `GET /health` - Estado del servicio hardware
   - `GET /state` - Obtener estado actual del StateManager
   - `POST /state` - Cambiar estado manualmente (para testing)
 
-- [ ] **HW-API-03**: Implementar endpoints de gestión de audio
+- [x] **HW-API-03**: Implementar endpoints de gestión de audio ✅
   - `GET /audio/capture` - Obtener último archivo de audio capturado
   - `GET /audio/status` - Estado de audio, VAD y grabación
   - `POST /audio/send` - Endpoint para enviar audio al backend local
+  - `GET /audio/download/{filename}` - Descargar archivos de audio específicos
 
-- [ ] **HW-API-04**: Implementar endpoints de control de hardware
+- [x] **HW-API-04**: Implementar endpoints de control de hardware ✅
   - `POST /led/pattern` - Cambiar patrón LED manualmente
   - `GET /metrics` - Métricas del sistema (CPU, memoria, eventos)
   - `POST /button/simulate` - Simular eventos de botón para testing
 
-- [ ] **HW-API-05**: Configurar documentación y testing
+- [x] **HW-API-05**: Configurar documentación y testing ✅
   - Añadir documentación OpenAPI/Swagger
-  - Implementar middleware de logging
-  - Crear tests básicos de endpoints
+  - Implementar middleware de logging con request IDs
+  - Crear tests completos de endpoints (14/14 tests passing)
+  - Configurar CORS para desarrollo
+  - Manejo robusto de errores HTTP
+
+**Estado**: ✅ **COMPLETADO** - 14 endpoints funcionales, documentación OpenAPI, tests completos
 
 ### 🔌 FASE 2: Cliente WebSocket en Hardware (Hito 10)
 
@@ -157,11 +162,13 @@
 
 ## 🚀 Plan de Ejecución
 
-### Sprint 1: Base API Hardware (1-2 semanas)
-- Tareas HW-API-01 a HW-API-05
-- Establecer comunicación HTTP básica
+### ✅ Sprint 1: Base API Hardware (COMPLETADO)
+- ✅ Tareas HW-API-01 a HW-API-05
+- ✅ Comunicación HTTP básica establecida
+- ✅ 14 endpoints funcionales con documentación
+- ✅ Tests completos (14/14 passing)
 
-### Sprint 2: WebSocket Hardware (1 semana)  
+### 🔄 Sprint 2: WebSocket Hardware (EN PROGRESO)  
 - Tareas HW-WS-01 a HW-WS-04
 - Comunicación en tiempo real hardware → backend
 
