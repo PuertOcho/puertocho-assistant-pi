@@ -79,12 +79,18 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 # Crear directorio de trabajo
 WORKDIR /app
 
-
 # Copiar todos los requirements segmentados y luego instalar
 COPY app/requirements/requirements*.txt /app/requirements/
-COPY app/requirements/requirements.txt /app/requirements/requirements.txt
-RUN pip install --upgrade pip && \
-    pip install -r /app/requirements/requirements.txt
+RUN pip install --upgrade pip
+RUN pip install -r /app/requirements/requirements-audio.txt
+RUN pip install -r /app/requirements/requirements-core.txt
+RUN pip install -r /app/requirements/requirements-dev.txt
+RUN pip install -r /app/requirements/requirements-hardware.txt
+RUN pip install -r /app/requirements/requirements-http.txt
+RUN pip install -r /app/requirements/requirements-logging.txt
+RUN pip install -r /app/requirements/requirements-nfc.txt
+RUN pip install -r /app/requirements/requirements-test.txt
+RUN pip install -r /app/requirements/requirements-wakeword.txt
 
 # Crear estructura de directorios
 RUN mkdir -p /app/logs \
@@ -92,7 +98,7 @@ RUN mkdir -p /app/logs \
     /app/data \
     /app/models \
     /app/scripts \
-    /app/tests
+    /app/tests 
 
 # Copiar scripts primero
 COPY scripts/ /app/scripts/

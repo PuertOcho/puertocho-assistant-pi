@@ -17,28 +17,7 @@ from dataclasses import dataclass
 from config import config
 from utils.logger import logger, log_hardware_event
 from utils.audio_buffer import DualChannelBuffer
-
-
-def simple_resample(audio, orig_sr, target_sr):
-    """
-    Resampling simple usando interpolación lineal.
-    """
-    if orig_sr == target_sr:
-        return audio
-    
-    # Calcular el factor de resampling
-    ratio = target_sr / orig_sr
-    
-    # Calcular la nueva longitud
-    new_length = int(len(audio) * ratio)
-    
-    # Crear índices para interpolación
-    old_indices = np.linspace(0, len(audio) - 1, new_length)
-    
-    # Interpolar
-    resampled = np.interp(old_indices, np.arange(len(audio)), audio)
-    
-    return resampled
+from utils.audio_resampling import simple_resample, prepare_for_wake_word, prepare_for_porcupine
 
 
 @dataclass
@@ -175,7 +154,7 @@ class WakeWordDetector:
     def process_audio_chunk(self, audio_data: np.ndarray) -> None:
         """
         Procesa un chunk de audio estéreo con resampling.
-        Usa la misma lógica que el test funcional.
+        Usa funciones centralizadas de audio_resampling.
         
         Args:
             audio_data: Array de audio estéreo (shape: [samples, 2] o [samples*2])
@@ -184,45 +163,39 @@ class WakeWordDetector:
             return
         
         try:
-            # El audio viene como estéreo [samples, 2], convertir a mono
-            if len(audio_data.shape) == 2:
-                # Convertir a mono promediando ambos canales
-                mono_audio = np.mean(audio_data, axis=1, dtype=np.float32)
+            # Usar función centralizada para convertir a mono (sin resampling aún)
+            from utils.audio_resampling import convert_stereo_to_mono, normalize_audio
+            
+            # Convertir a mono si es estéreo
+            if len(audio_data.shape) == 2 and audio_data.shape[1] == 2:
+                mono_audio = convert_stereo_to_mono(audio_data)
+            elif len(audio_data.shape) == 1 and len(audio_data) % 2 == 0:
+                mono_audio = convert_stereo_to_mono(audio_data)
             else:
-                mono_audio = audio_data.astype(np.float32)
+                mono_audio = audio_data
             
-            # Normalizar si no está normalizado
-            if mono_audio.dtype == np.int16:
-                mono_audio = mono_audio / 32767.0
+            # Normalizar a float32
+            mono_audio = normalize_audio(mono_audio, np.float32)
             
-            # Agregar al buffer
+            # Agregar al buffer SIN resampling
             self.audio_buffer_left = np.concatenate([self.audio_buffer_left, mono_audio])
             
-            # Procesar mientras tengamos suficientes muestras
-            while len(self.audio_buffer_left) >= int(self._porcupine_left.frame_length / self.resample_ratio):
-                # Calcular cuántas muestras necesitamos del audio original para obtener frame_length después del resampling
-                samples_needed = int(self._porcupine_left.frame_length / self.resample_ratio)
+            # Calcular cuántas muestras del audio original necesitamos para obtener frame_length después del resampling
+            # Si frame_length = 512 (a 16kHz) y tenemos 44.1kHz, necesitamos: 512 * (44100/16000) = ~1411 samples
+            samples_needed_original = int(self._porcupine_left.frame_length * self.input_sample_rate / self.target_sample_rate)
+            
+            # Procesar mientras tengamos suficientes muestras del audio original
+            while len(self.audio_buffer_left) >= samples_needed_original:
+                # Extraer chunk del audio original
+                chunk_original = self.audio_buffer_left[:samples_needed_original]
+                self.audio_buffer_left = self.audio_buffer_left[samples_needed_original:]
                 
-                # Extraer chunk para procesar
-                chunk = self.audio_buffer_left[:samples_needed]
-                self.audio_buffer_left = self.audio_buffer_left[samples_needed:]
+                # Usar función centralizada para preparar audio para Porcupine
+                pcm = prepare_for_porcupine(chunk_original, self.input_sample_rate, self._porcupine_left.frame_length)
                 
-                # Hacer resampling usando nuestra función simple
-                resampled = simple_resample(chunk, self.input_sample_rate, self.target_sample_rate)
-                
-                # Asegurar que tenemos exactamente frame_length samples
-                if len(resampled) < self._porcupine_left.frame_length:
-                    # Pad con ceros si es muy corto
-                    resampled = np.pad(resampled, (0, self._porcupine_left.frame_length - len(resampled)))
-                elif len(resampled) > self._porcupine_left.frame_length:
-                    # Truncar si es muy largo
-                    resampled = resampled[:self._porcupine_left.frame_length]
-                
-                # Convertir a int16 como requiere Porcupine
-                pcm = (resampled * 32767).astype(np.int16)
-                
-                # Asegurar que tenemos exactamente frame_length samples
+                # Verificar que tenemos exactamente frame_length samples
                 if len(pcm) != self._porcupine_left.frame_length:
+                    logger.warning(f"Frame length mismatch: expected {self._porcupine_left.frame_length}, got {len(pcm)}")
                     continue
                 
                 # Procesar con Porcupine
@@ -231,29 +204,33 @@ class WakeWordDetector:
                 # Si se detectó wake word
                 if result >= 0:
                     timestamp = time.time()
-                    logger.info(f"🔥 Wake word detected! Channel: left, Index: {result}")
                     
-                    # Ejecutar callback
-                    if self.on_wake_word:
-                        wake_word_event = WakeWordEvent(
-                            timestamp=timestamp,
-                            channel="left",
-                            keyword_index=result
-                        )
-                        self.on_wake_word(wake_word_event)
-                    
-                    # Actualizar estadísticas
-                    self._stats["total_detections"] += 1
-                    self._stats["left_channel_detections"] += 1
-                    self._stats["last_detection_time"] = timestamp
-                    
-                    # Log del evento
-                    log_hardware_event("wake_word_detected", {
-                        "channel": "left",
-                        "keyword_index": result,
-                        "timestamp": timestamp,
-                        "total_detections": self._stats["total_detections"]
-                    })
+                    # Verificar cooldown para evitar detecciones múltiples
+                    if timestamp - self._last_detection_time > self._detection_cooldown:
+                        logger.info(f"🔥 Wake word detected! Channel: left, Index: {result}")
+                        
+                        # Ejecutar callback
+                        if self.on_wake_word:
+                            wake_word_event = WakeWordEvent(
+                                timestamp=timestamp,
+                                channel="left",
+                                keyword_index=result
+                            )
+                            self.on_wake_word(wake_word_event)
+                        
+                        # Actualizar estadísticas
+                        self._stats["total_detections"] += 1
+                        self._stats["left_channel_detections"] += 1
+                        self._stats["last_detection_time"] = timestamp
+                        self._last_detection_time = timestamp
+                        
+                        # Log del evento
+                        log_hardware_event("wake_word_detected", {
+                            "channel": "left",
+                            "keyword_index": result,
+                            "timestamp": timestamp,
+                            "total_detections": self._stats["total_detections"]
+                        })
             
         except Exception as e:
             logger.error(f"Error procesando chunk de audio: {e}")
@@ -278,38 +255,30 @@ class WakeWordDetector:
         
         while not self._stop_event.is_set():
             try:
-                # Verificar si tenemos suficientes muestras para procesar
-                samples_needed = int(frame_length / self.resample_ratio)
+                # Calcular cuántas muestras del audio original necesitamos para obtener frame_length después del resampling
+                samples_needed_original = int(frame_length * self.input_sample_rate / self.target_sample_rate)
                 
-                if len(audio_buffer) < samples_needed:
+                if len(audio_buffer) < samples_needed_original:
                     time.sleep(0.01)  # Esperar más datos
                     continue
                 
-                # Extraer chunk para procesar
-                chunk = audio_buffer[:samples_needed]
+                # Extraer chunk del audio original para procesar
+                chunk_original = audio_buffer[:samples_needed_original]
                 
                 # Actualizar el buffer (esto es un poco ineficiente, pero funcional)
                 if channel == "left":
-                    self.audio_buffer_left = self.audio_buffer_left[samples_needed:]
+                    self.audio_buffer_left = self.audio_buffer_left[samples_needed_original:]
                     audio_buffer = self.audio_buffer_left
                 else:
-                    self.audio_buffer_right = self.audio_buffer_right[samples_needed:]
+                    self.audio_buffer_right = self.audio_buffer_right[samples_needed_original:]
                     audio_buffer = self.audio_buffer_right
                 
-                # Hacer resampling
-                resampled = simple_resample(chunk, self.input_sample_rate, self.target_sample_rate)
-                
-                # Asegurar que tenemos exactamente frame_length samples
-                if len(resampled) < frame_length:
-                    resampled = np.pad(resampled, (0, frame_length - len(resampled)))
-                elif len(resampled) > frame_length:
-                    resampled = resampled[:frame_length]
-                
-                # Convertir a int16 como requiere Porcupine
-                pcm = (resampled * 32767).astype(np.int16)
+                # Usar función centralizada para preparar audio para Porcupine
+                pcm = prepare_for_porcupine(chunk_original, self.input_sample_rate, frame_length)
                 
                 # Verificar que tenemos exactamente frame_length samples
                 if len(pcm) != frame_length:
+                    logger.warning(f"Frame length mismatch for {channel}: expected {frame_length}, got {len(pcm)}")
                     continue
                 
                 # Procesar con Porcupine

@@ -80,13 +80,15 @@ Esta arquitectura promueve el bajo acoplamiento y la alta cohesión, facilitando
 - [x] **5.7** Integrar con `StateManager`: recibirá audio en estado `IDLE` y notificará detecciones
 
 ### Hito 6: Detección de Silencio (VAD)
-- [ ] **6.1** Implementar Voice Activity Detection con WebRTC VAD
-- [ ] **6.2** Configurar umbrales de silencio dinámicos
-- [ ] **6.3** Notificar al `StateManager` el inicio y fin del habla para controlar la grabación
-- [ ] **6.4** Añadir filtros de ruido de fondo
-- [ ] **6.5** Optimizar para diferentes niveles de ruido ambiental
-- [ ] **6.6** Crear sistema de calibración automática
-- [ ] **6.7** Integrar con `StateManager`: recibirá audio en estado `LISTENING`
+- [x] **6.1** Implementar Voice Activity Detection con WebRTC VAD
+- [x] **6.2** Configurar umbrales de silencio dinámicos
+- [x] **6.3** Notificar al `StateManager` el inicio y fin del habla para controlar la grabación
+- [x] **6.4** Añadir resampling de audio (44.1kHz -> 16kHz) para compatibilidad con VAD
+- [x] **6.5** Implementar captura de audio durante el habla con pre-buffer
+- [x] **6.6** Crear sistema de guardado temporal del audio capturado
+- [x] **6.7** Integrar con `StateManager`: recibirá audio en estado `LISTENING`
+- [ ] **6.8** Optimizar para diferentes niveles de ruido ambiental
+- [ ] **6.9** Crear sistema de calibración automática de sensibilidad
 
 ### Hito 7: Módulo NFC (I2C)
 - [ ] **7.1** Configurar comunicación I2C para módulo NFC
@@ -103,30 +105,31 @@ Esta arquitectura promueve el bajo acoplamiento y la alta cohesión, facilitando
 - [ ] **7.6** Crear interfaz para configurar acciones NFC
 
 ### Hito 8: Sistema de Estados del Asistente (StateManager)
-- [ ] **8.1** Implementar la clase `StateManager` en `app/core/state_manager.py`.
-- [ ] **8.2** Definir los estados principales como un Enum: `IDLE`, `LISTENING`, `PROCESSING`, `SPEAKING`, `ERROR`.
-- [ ] **8.3** Implementar el método `handle_audio_chunk` que distribuirá el audio al componente correspondiente según el estado actual (`WakeWordDetector` o `VADHandler`).
-- [ ] **8.4** Crear la lógica de transiciones entre estados (ej: `IDLE` -> `LISTENING` al detectar wake word o botón).
-- [ ] **8.5** Integrar `LEDController` para que los patrones de LED se sincronicen automáticamente con los cambios de estado.
-- [ ] **8.6** Implementar un sistema de callbacks o eventos para que los manejadores de hardware notifiquen al `StateManager`.
-- [ ] **8.7** Añadir logging detallado para cada transición de estado y evento recibido.
-- [ ] **8.8** Manejar timeouts y recuperación de errores básicos (ej: volver a `IDLE` si algo falla).
+- [x] **8.1** Implementar la clase `StateManager` en `app/core/state_manager.py`.
+- [x] **8.2** Definir los estados principales como un Enum: `IDLE`, `LISTENING`, `PROCESSING`, `SPEAKING`, `ERROR`.
+- [x] **8.3** Implementar el método `handle_audio_chunk` que distribuirá el audio al componente correspondiente según el estado actual.
+- [x] **8.4** Crear la lógica de transiciones entre estados (ej: `IDLE` -> `LISTENING` al detectar wake word).
+- [x] **8.5** Integrar `LEDController` para que los patrones de LED se sincronicen automáticamente con los cambios de estado.
+- [x] **8.6** Implementar sistema de callbacks para que VADHandler notifique al `StateManager`.
+- [x] **8.7** Añadir logging detallado para cada transición de estado y evento recibido.
+- [x] **8.8** Implementar captura y almacenamiento temporal de audio durante LISTENING.
+- [ ] **8.9** Manejar timeouts y recuperación de errores (ej: volver a `IDLE` si algo falla).
+- [ ] **8.10** Implementar límite de tiempo máximo en estado LISTENING.
 
 ### Hito 9: API HTTP y Endpoints
 - [ ] **9.1** Configurar FastAPI para endpoints HTTP
 - [ ] **9.2** Implementar endpoints principales:
   - `GET /health` - Estado del servicio
-  - `POST /audio/start` - Iniciar grabación
-  - `POST /audio/stop` - Parar grabación
-  - `GET /audio/status` - Estado de audio
-  - `POST /nfc/read` - Leer etiqueta NFC
-  - `POST /nfc/write` - Escribir etiqueta NFC
-  - `GET /nfc/status` - Estado NFC
+  - `POST /audio/capture` - Obtener último audio capturado
+  - `GET /audio/status` - Estado de audio y VAD
+  - `POST /state` - Cambiar estado manualmente
+  - `GET /state` - Obtener estado actual
   - `POST /led/pattern` - Cambiar patrón LED
-- [ ] **9.3** Implementar autenticación y validación
-- [ ] **9.4** Añadir documentación OpenAPI/Swagger
-- [ ] **9.5** Implementar rate limiting
-- [ ] **9.6** Añadir métricas y monitoreo
+  - `GET /metrics` - Métricas del sistema
+- [ ] **9.3** Implementar endpoint para recibir audio capturado por VAD
+- [ ] **9.4** Añadir streaming de audio en tiempo real
+- [ ] **9.5** Implementar autenticación básica
+- [ ] **9.6** Añadir documentación OpenAPI/Swagger
 
 ### Hito 10: Comunicación WebSocket
 - [ ] **10.1** Implementar cliente WebSocket para comunicación en tiempo real
@@ -289,13 +292,20 @@ puertocho-assistant-hardware/
 - 🔄 Documentar todas las configuraciones y calibraciones
 
 ### 🎯 Estado Actual del Proyecto
-**Hardware Base**: ✅ COMPLETADO (Hitos 1-4)
+**Hardware Base**: ✅ COMPLETADO (Hitos 1-5)
 - Contenedor Docker configurado y funcionando
 - Audio ReSpeaker operativo con grabación/reproducción
 - LEDs RGB APA102 con patrones dinámicos
 - Detección de botón GPIO con eventos y callbacks
+- Wake Word Detection con Porcupine funcionando
 
-**Próximo Objetivo**: 🚀 Wake Word Detection (Hito 5)
-- Integrar Porcupine para detección "Puerto-ocho"
-- Implementar buffer circular de audio
-- Crear sistema de calibración de sensibilidad
+**VAD y StateManager**: ✅ COMPLETADO (Hitos 6-8)
+- VAD implementado con captura de audio y resampling
+- StateManager con flujo completo de estados
+- Integración completa entre todos los componentes
+- Audio capturado y guardado localmente
+
+**Próximo Objetivo**: 🚀 API HTTP (Hito 9) y WebSocket (Hito 10)
+- Implementar endpoints HTTP para comunicación
+- Preparar envío de audio capturado al backend
+- Establecer comunicación en tiempo real con el backend
