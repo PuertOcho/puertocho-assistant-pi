@@ -116,47 +116,66 @@ Esta arquitectura promueve el bajo acoplamiento y la alta cohesión, facilitando
 - [ ] **8.9** Manejar timeouts y recuperación de errores (ej: volver a `IDLE` si algo falla).
 - [ ] **8.10** Implementar límite de tiempo máximo en estado LISTENING.
 
-### Hito 9: API HTTP y Endpoints
-- [ ] **9.1** Configurar FastAPI para endpoints HTTP
-- [ ] **9.2** Implementar endpoints principales:
-  - `GET /health` - Estado del servicio
-  - `POST /audio/capture` - Obtener último audio capturado
-  - `GET /audio/status` - Estado de audio y VAD
-  - `POST /state` - Cambiar estado manualmente
-  - `GET /state` - Obtener estado actual
-  - `POST /led/pattern` - Cambiar patrón LED
-  - `GET /metrics` - Métricas del sistema
-- [ ] **9.3** Implementar endpoint para recibir audio capturado por VAD
-- [ ] **9.4** Añadir streaming de audio en tiempo real
-- [ ] **9.5** Implementar autenticación básica
-- [ ] **9.6** Añadir documentación OpenAPI/Swagger
+### Hito 9: API HTTP y Endpoints (FASE 1 - PROJECT_TRACKER)
+- [x] **9.1** Configurar FastAPI en `app/api/http_server.py` (HW-API-01) ✅
+  - Implementar estructura base del servidor
+  - Configurar CORS y middlewares necesarios
+  - Integrar con el StateManager existente
+- [x] **9.2** Implementar endpoints básicos (HW-API-02) ✅
+  - `GET /health` - Estado del servicio hardware ✅
+  - `GET /state` - Obtener estado actual del StateManager ✅
+  - `POST /state` - Cambiar estado manualmente (para testing) ✅
+- [x] **9.3** Implementar endpoints de gestión de audio (HW-API-03) ✅
+  - `GET /audio/capture` - Obtener último archivo de audio capturado ✅
+  - `GET /audio/status` - Estado de audio, VAD y grabación ✅
+  - `POST /audio/send` - Endpoint para enviar audio al backend local ✅
+  - `GET /audio/download/{filename}` - Descargar archivos de audio específicos ✅
+- [ ] **9.4** Implementar endpoints de control de hardware (HW-API-04)
+  - `POST /led/pattern` - Cambiar patrón LED manualmente
+  - `GET /metrics` - Métricas del sistema (CPU, memoria, eventos)
+  - `POST /button/simulate` - Simular eventos de botón para testing
+- [ ] **9.5** Configurar documentación y testing (HW-API-05)
+  - Añadir documentación OpenAPI/Swagger
+  - Implementar middleware de logging
+  - Crear tests básicos de endpoints
 
-### Hito 10: Comunicación WebSocket
-- [ ] **10.1** Implementar cliente WebSocket para comunicación en tiempo real
-- [ ] **10.2** Eventos a enviar al backend:
-  - Audio grabado
-  - Cambios de estado
-  - Eventos de botón
-  - Eventos NFC
-  - Métricas de hardware
-- [ ] **10.3** Eventos a recibir del backend:
-  - Comandos de control
-  - Cambios de configuración
-  - Patrones LED personalizados
-- [ ] **10.4** Implementar reconexión automática
-- [ ] **10.5** Añadir heartbeat y keep-alive
-- [ ] **10.6** Manejar cola de mensajes para conexiones intermitentes
+### Hito 10: Comunicación WebSocket (FASE 2 - PROJECT_TRACKER)
+- [ ] **10.1** Implementar cliente WebSocket (HW-WS-01)
+  - Conexión al backend local en puerto definido
+  - Sistema de reconexión automática con backoff exponencial
+  - Manejo de errores y timeouts
+- [ ] **10.2** Implementar emisión de eventos desde hardware (HW-WS-02)
+  - Audio capturado (envío automático cuando VAD termina)
+  - Cambios de estado del StateManager
+  - Eventos de botón (corto/largo)
+  - Métricas de hardware en tiempo real
+- [ ] **10.3** Implementar recepción de comandos desde backend (HW-WS-03)
+  - Cambios de configuración remotos
+  - Control de patrones LED
+  - Activación manual del sistema
+  - Comandos de calibración
+- [ ] **10.4** Integrar WebSocket con StateManager (HW-WS-04)
+  - Notificaciones automáticas de cambios de estado
+  - Queue de mensajes para conexiones intermitentes
+  - Heartbeat y keep-alive
 
-### Hito 11: Integración con Backend
-- [ ] **11.1** Adaptar endpoints del backend para recibir:
-  - `/hardware/audio` - Recibir audio grabado
-  - `/hardware/status` - Recibir estado del hardware
-  - `/hardware/nfc` - Recibir eventos NFC
-- [ ] **11.2** Implementar formato de datos estándar
-- [ ] **11.3** Añadir compresión de audio para transmisión
-- [ ] **11.4** Implementar retry logic para fallos de comunicación
-- [ ] **11.5** Crear sistema de configuración remota
-- [ ] **11.6** Añadir sincronización de tiempo entre servicios
+### Hito 11: Integración con Backend Local
+- [ ] **11.1** Configurar comunicación con backend local (referencia PROJECT_TRACKER FASE 3-4)
+  - Configurar endpoints del backend local para recibir datos del hardware
+  - Implementar formato de datos estándar para comunicación
+  - Configurar variables de entorno para endpoints
+- [ ] **11.2** Integrar envío automático de audio capturado
+  - Envío automático cuando VAD completa la captura
+  - Compresión de audio para transmisión eficiente
+  - Manejo de errores y reintentos
+- [ ] **11.3** Implementar sincronización de estados
+  - Sincronización bidireccional de estados entre hardware y backend
+  - Notificaciones de cambios de estado en tiempo real
+  - Manejo de conflictos de estado
+- [ ] **11.4** Configurar sistema de configuración remota
+  - Recepción de configuraciones desde backend local
+  - Aplicación dinámica de configuraciones sin reinicio
+  - Validación de configuraciones recibidas
 
 ### Hito 12: Configuración y Persistencia
 - [ ] **12.1** Crear archivo de configuración YAML/JSON
@@ -305,7 +324,8 @@ puertocho-assistant-hardware/
 - Integración completa entre todos los componentes
 - Audio capturado y guardado localmente
 
-**Próximo Objetivo**: 🚀 API HTTP (Hito 9) y WebSocket (Hito 10)
-- Implementar endpoints HTTP para comunicación
-- Preparar envío de audio capturado al backend
-- Establecer comunicación en tiempo real con el backend
+**Próximo Objetivo**: 🚀 API HTTP (Hito 9) → WebSocket (Hito 10) → Integración Backend (Hito 11)
+- Implementar endpoints HTTP para comunicación local
+- Establecer comunicación WebSocket en tiempo real
+- Integrar con backend local para procesamiento remoto
+- Seguir roadmap del PROJECT_TRACKER para sincronización entre servicios
