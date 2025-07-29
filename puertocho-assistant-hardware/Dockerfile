@@ -79,18 +79,39 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 # Crear directorio de trabajo
 WORKDIR /app
 
-# Copiar todos los requirements segmentados y luego instalar
-COPY app/requirements/requirements*.txt /app/requirements/
+# Upgrade pip una sola vez
 RUN pip install --upgrade pip
-RUN pip install -r /app/requirements/requirements-audio.txt
+
+# Crear directorio requirements
+RUN mkdir -p /app/requirements
+
+# Copiar e instalar cada archivo de requirements individualmente para aprovechar el cache
+COPY app/requirements/requirements-core.txt /app/requirements/
 RUN pip install -r /app/requirements/requirements-core.txt
-RUN pip install -r /app/requirements/requirements-dev.txt
-RUN pip install -r /app/requirements/requirements-hardware.txt
-RUN pip install -r /app/requirements/requirements-http.txt
+
+COPY app/requirements/requirements-logging.txt /app/requirements/
 RUN pip install -r /app/requirements/requirements-logging.txt
-RUN pip install -r /app/requirements/requirements-nfc.txt
-RUN pip install -r /app/requirements/requirements-test.txt
+
+COPY app/requirements/requirements-audio.txt /app/requirements/
+RUN pip install -r /app/requirements/requirements-audio.txt
+
+COPY app/requirements/requirements-hardware.txt /app/requirements/
+RUN pip install -r /app/requirements/requirements-hardware.txt
+
+COPY app/requirements/requirements-wakeword.txt /app/requirements/
 RUN pip install -r /app/requirements/requirements-wakeword.txt
+
+COPY app/requirements/requirements-http.txt /app/requirements/
+RUN pip install -r /app/requirements/requirements-http.txt
+
+COPY app/requirements/requirements-nfc.txt /app/requirements/
+RUN pip install -r /app/requirements/requirements-nfc.txt
+
+COPY app/requirements/requirements-test.txt /app/requirements/
+RUN pip install -r /app/requirements/requirements-test.txt
+
+COPY app/requirements/requirements-dev.txt /app/requirements/
+RUN pip install -r /app/requirements/requirements-dev.txt
 
 # Crear estructura de directorios
 RUN mkdir -p /app/logs \

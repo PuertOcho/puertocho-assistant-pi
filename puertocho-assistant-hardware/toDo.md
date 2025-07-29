@@ -130,14 +130,14 @@ Esta arquitectura promueve el bajo acoplamiento y la alta cohesión, facilitando
   - `GET /audio/status` - Estado de audio, VAD y grabación ✅
   - `POST /audio/send` - Endpoint para enviar audio al backend local ✅
   - `GET /audio/download/{filename}` - Descargar archivos de audio específicos ✅
-- [ ] **9.4** Implementar endpoints de control de hardware (HW-API-04)
-  - `POST /led/pattern` - Cambiar patrón LED manualmente
-  - `GET /metrics` - Métricas del sistema (CPU, memoria, eventos)
-  - `POST /button/simulate` - Simular eventos de botón para testing
-- [ ] **9.5** Configurar documentación y testing (HW-API-05)
-  - Añadir documentación OpenAPI/Swagger
-  - Implementar middleware de logging
-  - Crear tests básicos de endpoints
+- [x] **9.4** Implementar endpoints de control de hardware (HW-API-04) ✅
+  - `POST /led/pattern` - Cambiar patrón LED manualmente ✅
+  - `GET /metrics` - Métricas del sistema (CPU, memoria, eventos) ✅
+  - `POST /button/simulate` - Simular eventos de botón para testing ✅
+- [x] **9.5** Configurar documentación y testing (HW-API-05) ✅
+  - Añadir documentación OpenAPI/Swagger ✅
+  - Implementar middleware de logging ✅
+  - Crear tests básicos de endpoints ✅
 
 ### Hito 10: Comunicación WebSocket (FASE 2 - PROJECT_TRACKER)
 - [ ] **10.1** Implementar cliente WebSocket (HW-WS-01)
@@ -324,7 +324,15 @@ puertocho-assistant-hardware/
 - Integración completa entre todos los componentes
 - Audio capturado y guardado localmente
 
-**Próximo Objetivo**: 🚀 API HTTP (Hito 9) → WebSocket (Hito 10) → Integración Backend (Hito 11)
+**API HTTP**: ✅ COMPLETADO (Hito 9)
+- FastAPI configurado con 14 endpoints funcionales
+- Documentación OpenAPI/Swagger automática
+- Middleware de logging con request tracking
+- Tests completos de endpoints (14/14 tests passing)
+- CORS configurado para desarrollo
+- Manejo robusto de errores HTTP
+
+**Próximo Objetivo**: 🚀 WebSocket (Hito 10) → Integración Backend (Hito 11)
 - Implementar endpoints HTTP para comunicación local
 - Establecer comunicación WebSocket en tiempo real
 - Integrar con backend local para procesamiento remoto
