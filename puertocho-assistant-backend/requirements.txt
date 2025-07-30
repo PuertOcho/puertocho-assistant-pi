@@ -1,17 +1,22 @@
-# Core FastAPI dependencies - usando versiones básicas para evitar compilación innecesaria
-fastapi==0.104.1
-uvicorn==0.24.0
-websockets==12.0
+# Core FastAPI dependencies - versiones compatibles con ARM Alpine
+fastapi==0.100.1
+uvicorn[standard]==0.22.0
+websockets==11.0.3
 python-dotenv==1.0.0
-structlog==23.2.0
+
+# HTTP client para comunicación con hardware
+httpx==0.24.1
 
 # Testing dependencies
-pytest==7.4.3
-pytest-asyncio==0.21.1
+pytest==7.4.0
+pytest-asyncio==0.21.0
 
-# HTTP client
-httpx==0.25.2
-
-# Additional dependencies that might be needed
-pydantic==2.5.0
+# Additional dependencies - versiones estables
+pydantic==1.10.12
 starlette==0.27.0
+
+# Audio processing (para buffer de audio)
+python-multipart==0.0.6
+
+# Logging estructurado
+structlog==22.3.0

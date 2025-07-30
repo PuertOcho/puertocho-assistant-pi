@@ -71,8 +71,8 @@ class NFCConfig:
 @dataclass
 class BackendConfig:
     """Configuración del backend"""
-    url: str = os.getenv("BACKEND_URL", "http://localhost:8765")
-    ws_url: str = os.getenv("BACKEND_WS_URL", "ws://localhost:8765/ws")
+    url: str = os.getenv("BACKEND_URL", "http://localhost:8000")
+    ws_url: str = os.getenv("BACKEND_WS_URL", "ws://localhost:8000/ws")
     timeout: int = int(os.getenv("BACKEND_TIMEOUT", "30"))
 
 @dataclass

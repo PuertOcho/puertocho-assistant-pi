@@ -53,62 +53,67 @@
 
 **Estado**: ✅ **COMPLETADO** - 14 endpoints funcionales, documentación OpenAPI, tests completos
 
-### 🔌 FASE 2: Cliente WebSocket en Hardware (Hito 10)
+### 🔧 EVALUACIÓN POST-FASE 1: Estado del Backend Actual
 
-- [ ] **HW-WS-01**: Implementar cliente WebSocket en `app/api/websocket_client.py`
-  - Conexión al backend local en puerto definido
-  - Sistema de reconexión automática con backoff exponencial
-  - Manejo de errores y timeouts
+Tras completar exitosamente la Fase 1 del hardware, hemos identificado que el **backend local actual está desactualizado** y no se alinea con la nueva arquitectura del hardware. El backend actual:
 
-- [ ] **HW-WS-02**: Implementar emisión de eventos desde hardware
-  - Audio capturado (envío automático cuando VAD termina)
-  - Cambios de estado del StateManager
-  - Eventos de botón (corto/largo)
-  - Métricas de hardware en tiempo real
+**❌ Problemas Identificados:**
+- Simula estados en lugar de recibir datos reales del hardware
+- No tiene endpoints para recibir audio desde hardware (puerto 8080)
+- WebSocket simple sin manejo robusto de reconexión
+- Estado hardcodeado sin sincronización real con hardware
+- Falta de cliente HTTP para comunicarse con hardware
+- No maneja la cola de audio ni buffer para backend remoto
 
-- [ ] **HW-WS-03**: Implementar recepción de comandos desde backend
-  - Cambios de configuración remotos
-  - Control de patrones LED
-  - Activación manual del sistema
-  - Comandos de calibración
+**✅ Elementos Reutilizables:**
+- Estructura FastAPI básica
+- WebSocket manager para frontend
+- Middleware CORS
+- Dockerfile Alpine base
 
-- [ ] **HW-WS-04**: Integrar WebSocket con StateManager
-  - Notificaciones automáticas de cambios de estado
-  - Queue de mensajes para conexiones intermitentes
-  - Heartbeat y keep-alive
+**🎯 Decisión**: Reimplementar backend local siguiendo el patrón exitoso del hardware
 
-### 🖥️ FASE 3: Reimplementación del Backend Local
+### �️ FASE 2: Reimplementación del Backend Local (Hito 10) 🔄 EN PROGRESO
 
-- [ ] **BE-CORE-01**: Configurar estructura base del proyecto backend
-  - Limpiar código obsoleto del backend actual
-  - Configurar FastAPI como framework principal
-  - Sistema de logging centralizado y estructurado
-  - Gestión de configuración con variables de entorno
+**Objetivo**: Desarrollar un backend local que funcione como gateway real entre hardware (puerto 8080) y servicios remotos.
 
-- [ ] **BE-CORE-02**: Implementar StateManager central para el backend
-  - Gestión del estado actual del sistema completo
-  - Sincronización entre hardware, frontend y backend remoto
+- [ ] **BE-CORE-01**: Limpiar y reestructurar código base existente
+  - Mantener Dockerfile Alpine y requirements.txt básicos
+  - Preservar estructura FastAPI + WebSocket para frontend
+  - Eliminar simulaciones y estados hardcodeados
+  - Configurar logging estructurado con request IDs (siguiendo patrón hardware)
+
+- [ ] **BE-CORE-02**: Implementar StateManager central para backend
+  - Gestión unificada del estado hardware + backend + frontend
+  - Sincronización bidireccional con hardware (puerto 8080)
   - Persistencia temporal de estados importantes
+  - Manejo de inconsistencias y recuperación de fallos
 
-- [ ] **BE-API-01**: Implementar endpoints para recibir datos del hardware
-  - `POST /hardware/audio` - Recibir y procesar audio capturado
-  - `POST /hardware/status` - Actualizar estado del hardware
-  - `POST /hardware/events` - Recibir eventos (botón, NFC, etc.)
-  - `GET /hardware/config` - Configuración para el hardware
+- [ ] **BE-API-01**: Implementar endpoints para recibir datos del hardware ✅ Patrón definido
+  - `POST /hardware/audio` - Recibir archivos de audio capturados por VAD
+  - `POST /hardware/status` - Actualizar estado del hardware en tiempo real
+  - `POST /hardware/events` - Recibir eventos (botón, wake word, errores)
+  - `GET /hardware/config` - Configuración que el hardware debe usar
 
-- [ ] **BE-API-02**: Implementar endpoints para comunicación con frontend
-  - `GET /state` - Estado actual del sistema completo
-  - `POST /control` - Comandos de control desde la UI
-  - `GET /history` - Historial de interacciones
-  - `GET /metrics` - Métricas del sistema completo
+- [ ] **BE-API-02**: Actualizar endpoints para comunicación con frontend
+  - `GET /state` - Estado unificado del sistema completo (hardware + backend)
+  - `POST /control` - Comandos de control que se envían al hardware
+  - `GET /history` - Historial de interacciones y audio procesado
+  - `GET /metrics` - Métricas agregadas de hardware + backend + remoto
 
-- [ ] **BE-WS-01**: Implementar servidor WebSocket dual
-  - Servidor WebSocket para conexión con hardware
-  - Servidor WebSocket para conexión con frontend
-  - Distribución inteligente de mensajes entre conexiones
-  - Gestión de múltiples clientes frontend
+- [ ] **BE-CLIENT-01**: Implementar cliente HTTP para comunicación con hardware
+  - Cliente HTTP robusto para endpoints hardware (puerto 8080)
+  - Healthcheck y monitoreo de conexión con hardware
+  - Retry logic y manejo de timeouts
+  - Configuración por variables de entorno
 
-### 🌐 FASE 4: Comunicación con Backend Remoto
+- [ ] **BE-WS-01**: Actualizar servidor WebSocket para frontend
+  - Mantener compatibilidad con frontend existente
+  - Transmitir eventos reales desde hardware
+  - Comandos de control hacia hardware
+  - Distribuir métricas y estados en tiempo real
+
+### 🌐 FASE 3: Comunicación con Backend Remoto (Hito 11)
 
 - [ ] **BE-REMOTE-01**: Implementar cliente HTTP/REST para backend remoto
   - Autenticación segura y manejo de tokens
@@ -130,11 +135,38 @@
   - Cola de peticiones con prioridades
   - Sincronización cuando se restablece la conexión
 
+### 🔌 FASE 4: Cliente WebSocket en Hardware (Hito 12) 
+
+**Nota**: Movido después del backend local para aprovechar la nueva implementación
+
+- [ ] **HW-WS-01**: Implementar cliente WebSocket en `app/api/websocket_client.py`
+  - Conexión al backend local actualizado (puerto 8000)
+  - Sistema de reconexión automática con backoff exponencial
+  - Manejo de errores y timeouts siguiendo patrón del HTTP server
+
+- [ ] **HW-WS-02**: Implementar emisión de eventos desde hardware
+  - Audio capturado (envío automático cuando VAD termina)
+  - Cambios de estado del StateManager
+  - Eventos de botón (corto/largo)
+  - Métricas de hardware en tiempo real
+
+- [ ] **HW-WS-03**: Implementar recepción de comandos desde backend
+  - Cambios de configuración remotos
+  - Control de patrones LED
+  - Activación manual del sistema
+  - Comandos de calibración
+
+- [ ] **HW-WS-04**: Integrar WebSocket con StateManager
+  - Notificaciones automáticas de cambios de estado
+  - Queue de mensajes para conexiones intermitentes
+  - Heartbeat y keep-alive
+
 ### 🔗 FASE 5: Integración y Pruebas
 
 - [ ] **INT-01**: Pruebas de integración hardware → backend local
-  - Validar transmisión correcta de audio
-  - Verificar sincronización de estados en tiempo real
+  - Validar comunicación HTTP bidireccional (hardware:8080 ↔ backend:8000)
+  - Verificar transmisión correcta de audio desde hardware
+  - Validar sincronización de estados en tiempo real
   - Pruebas de latencia y rendimiento
 
 - [ ] **INT-02**: Pruebas de integración backend local → backend remoto
@@ -151,34 +183,37 @@
   - Actualizar docker-compose.yml para la nueva arquitectura
   - Configurar redes y volúmenes necesarios
   - Variables de entorno para cada servicio
+  - Healthchecks para todos los servicios
 
 ## 📊 Métricas de Éxito
 
-- **Latencia hardware → backend local**: < 200ms
-- **Reconexión WebSocket**: < 5 segundos
+- **Latencia hardware → backend local**: < 200ms (HTTP bidireccional)
+- **Reconexión y recuperación**: < 5 segundos ante fallos
 - **Latencia end-to-end**: < 3 segundos
 - **Pérdida de paquetes**: < 0.1% en condiciones normales
 - **Disponibilidad del sistema**: > 99% uptime
 
-## 🚀 Plan de Ejecución
+## 🚀 Plan de Ejecución Actualizado
 
 ### ✅ Sprint 1: Base API Hardware (COMPLETADO)
 - ✅ Tareas HW-API-01 a HW-API-05
 - ✅ Comunicación HTTP básica establecida
 - ✅ 14 endpoints funcionales con documentación
 - ✅ Tests completos (14/14 passing)
+- ✅ StateManager robusto con estados bien definidos
 
-### 🔄 Sprint 2: WebSocket Hardware (EN PROGRESO)  
-- Tareas HW-WS-01 a HW-WS-04
-- Comunicación en tiempo real hardware → backend
-
-### Sprint 3: Backend Local (2 semanas)
+### 🔄 Sprint 2: Backend Local Gateway (EN PROGRESO)  
 - Tareas BE-CORE-01 a BE-WS-01
-- Gateway funcional entre hardware y remoto
+- Gateway funcional que consume API del hardware
+- Comunicación bidireccional hardware ↔ backend
 
-### Sprint 4: Integración Remota (1-2 semanas)
+### Sprint 3: Integración Remota (1-2 semanas)
 - Tareas BE-REMOTE-01 a BE-REMOTE-04
 - Conexión completa con backend de IA
+
+### Sprint 4: WebSocket Hardware (1 semana)
+- Tareas HW-WS-01 a HW-WS-04
+- Comunicación en tiempo real optimizada
 
 ### Sprint 5: Testing e Integración (1 semana)
 - Tareas INT-01 a INT-04
@@ -186,8 +221,17 @@
 
 ## 📝 Notas Técnicas
 
-- **Puerto Backend Local**: 8000 (HTTP) / 8001 (WebSocket)
-- **Puerto Hardware**: 8080 (HTTP) / 8081 (WebSocket)
+- **Puerto Backend Local**: 8000 (HTTP + WebSocket para frontend)
+- **Puerto Hardware**: 8080 (HTTP API - ya funcional)
+- **Comunicación Hardware ↔ Backend**: HTTP RESTful bidireccional
 - **Formato de Audio**: WAV, 16kHz, mono para transmisión
-- **Protocolo WebSocket**: JSON para todos los mensajes
+- **Protocolo Frontend**: WebSocket JSON para UI en tiempo real
 - **Autenticación**: API Keys para backend remoto
+- **Logging**: Request IDs y logging estructurado en ambos servicios
+
+### 🔄 Cambios Arquitectónicos Importantes
+
+1. **Prioridad HTTP sobre WebSocket**: El hardware ya tiene HTTP robusto, el backend debe consumirlo
+2. **Backend como Cliente**: Backend local debe ser cliente del hardware (no al revés)
+3. **Estados Sincronizados**: Hardware mantiene estado principal, backend lo replica
+4. **WebSocket Opcional**: Para optimización futura, no bloqueante para MVP

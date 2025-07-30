@@ -54,6 +54,14 @@ class HardwareService:
         log_hardware_event("service_stopping")
         self.running = False
         
+        # Stop HTTP server
+        if hasattr(self, 'server_task'):
+            self.server_task.cancel()
+        
+        # Stop WebSocket client
+        if hasattr(self, 'websocket_client'):
+            await self.websocket_client.stop()
+        
         # Stop components in reverse order
         if hasattr(self, 'audio_manager'):
             self.audio_manager.stop_recording()
@@ -111,6 +119,12 @@ class HardwareService:
         
         # Pasar referencia al event loop para operaciones asíncronas
         self.state_manager._event_loop = asyncio.get_running_loop()
+        
+        log_hardware_event("state_manager_initialized", {
+            "has_led_controller": self.led_controller is not None,
+            "has_vad_handler": self.vad_handler is not None,
+            "initial_state": self.state_manager.state.name
+        })
 
         # Initialize audio manager with configuration
         from core.audio_manager import AudioManager
@@ -136,8 +150,45 @@ class HardwareService:
 
         # TODO: Initialize button handler
         # TODO: Initialize NFC manager
-        # TODO: Initialize HTTP server
-        # TODO: Initialize WebSocket client
+        
+        # Initialize HTTP server
+        from api.http_server import HTTPServer
+        self.http_server = HTTPServer(
+            state_manager=self.state_manager,
+            port=8080
+        )
+        
+        # Start HTTP server asynchronously
+        import uvicorn
+        self.server_config = self.http_server.start_async()
+        self.server_task = asyncio.create_task(
+            uvicorn.Server(uvicorn.Config(**self.server_config)).serve()
+        )
+        self.tasks.append(self.server_task)
+        
+        log_hardware_event("http_server_initialized", {
+            "port": 8080,
+            "docs_url": "http://localhost:8080/docs"
+        })
+        
+        # Initialize WebSocket client for backend communication
+        from api.websocket_client import WebSocketClient
+        self.websocket_client = WebSocketClient(
+            ws_url=config.backend.ws_url,
+            reconnect_interval=5.0,
+            max_reconnect_attempts=0  # Infinite reconnection attempts
+        )
+        
+        # Connect WebSocket client to state manager
+        self.state_manager.websocket_client = self.websocket_client
+        
+        # Start WebSocket connection
+        self.websocket_task = asyncio.create_task(self.websocket_client.start())
+        self.tasks.append(self.websocket_task)
+        
+        log_hardware_event("websocket_client_initialized", {
+            "backend_url": config.backend.ws_url
+        })
 
         log_hardware_event("components_initialized")
     
@@ -149,6 +200,7 @@ class HardwareService:
                 self.wake_word_detector.process_audio_chunk(audio_data)
             elif self.state_manager.state == AssistantState.LISTENING:
                 # En LISTENING, enrutar audio al VADHandler vía StateManager
+                logger.debug(f"🎙️ Routing audio to VAD in LISTENING state, size: {len(audio_data) if hasattr(audio_data, '__len__') else 'unknown'}")
                 self.state_manager.handle_audio_chunk(audio_data)
         else:
             # Fallback: solo wake word

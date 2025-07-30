@@ -1,24 +1,25 @@
 services:
-  # Backend API - FastAPI WebSocket Server
+  # Backend Gateway - FastAPI WebSocket Server
   puertocho-backend:
     build: 
       context: ./puertocho-assistant-backend
       dockerfile: Dockerfile
-    container_name: puertocho-assistant-backend
-    ports:
-      - "8765:8765"
+    container_name: puertocho-assistant-backend-gateway
+    network_mode: host
     environment:
       - PYTHONUNBUFFERED=1
-      - BACKEND_HOST=0.0.0.0
-      - BACKEND_PORT=8765
-      - BACKEND_LOG_LEVEL=INFO
+      - HARDWARE_BASE_URL=http://localhost:8080
+      - BACKEND_PORT=8000
+      - LOG_LEVEL=INFO
+      - HARDWARE_HEALTH_CHECK_INTERVAL=30
+      - AUDIO_BUFFER_SIZE=10
     volumes:
       - ./puertocho-assistant-backend/src:/app/src
-    networks:
-      - puertocho-network
+    depends_on:
+      - puertocho-assistant-hardware
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8765/health"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "--method=GET", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -30,19 +31,16 @@ services:
       context: ./puertocho-assistant-web-view
       dockerfile: Dockerfile
     container_name: puertocho-web-dashboard
-    ports:
-      - "3000:3000"
+    network_mode: host
     environment:
       - NODE_ENV=production
-      - VITE_BACKEND_WS_URL=ws://localhost:8765/ws
-      - VITE_BACKEND_HTTP_URL=http://localhost:8765
-    networks:
-      - puertocho-network
+      - VITE_BACKEND_WS_URL=ws://localhost:8000/ws
+      - VITE_BACKEND_HTTP_URL=http://localhost:8000
     depends_on:
       - puertocho-backend
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:3000"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -62,8 +60,8 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - HARDWARE_LOG_LEVEL=INFO
-      - BACKEND_URL=http://localhost:8765
-      - BACKEND_WS_URL=ws://localhost:8765/ws
+      - BACKEND_URL=http://localhost:8000
+      - BACKEND_WS_URL=ws://localhost:8000/ws
       - PULSE_SERVER=unix:/run/user/1000/pulse/native
     volumes:
       - /dev:/dev
@@ -84,19 +82,12 @@ services:
       - /dev/snd:/dev/snd
       - /dev/gpiomem:/dev/gpiomem
       - /dev/mem:/dev/mem
-    depends_on:
-      - puertocho-backend
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
-
-networks:
-  puertocho-network:
-    driver: bridge
-    name: puertocho-assistant-network
 
 # Volumes para persistencia (futuro)
 volumes:

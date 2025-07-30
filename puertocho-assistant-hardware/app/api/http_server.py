@@ -39,11 +39,6 @@ class ButtonSimulateRequest(BaseModel):
     event_type: str  # 'short', 'long'
     duration: Optional[float] = None  # Duración personalizada
 
-class AudioSendRequest(BaseModel):
-    """Modelo para enviar audio al backend local"""
-    backend_url: Optional[str] = None
-    compress: bool = True
-
 class HTTPServer:
     """
     Servidor HTTP para la API REST del hardware.
@@ -360,56 +355,11 @@ class HTTPServer:
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     detail=f"Error getting audio status: {str(e)}"
                 )
+
+        # ========================
+        # ENDPOINTS DE CONTROL DE HARDWARE (HW-API-04)
+        # ========================
         
-        @self.app.post("/audio/send",
-                      summary="Send Audio to Backend",
-                      description="Enviar último audio capturado al backend local")
-        async def send_audio_to_backend(request: AudioSendRequest):
-            """Endpoint para enviar audio al backend local"""
-            try:
-                # Obtener último archivo de audio
-                captured_dir = Path("/app/captured_audio")
-                if not captured_dir.exists():
-                    raise HTTPException(
-                        status_code=status.HTTP_404_NOT_FOUND,
-                        detail="No captured audio directory found"
-                    )
-                
-                audio_files = list(captured_dir.glob("captured_*.wav"))
-                if not audio_files:
-                    raise HTTPException(
-                        status_code=status.HTTP_404_NOT_FOUND,
-                        detail="No captured audio files to send"
-                    )
-                
-                latest_file = max(audio_files, key=lambda f: f.stat().st_mtime)
-                
-                # TODO: Implementar envío real al backend en próximas iteraciones
-                # Por ahora, simular el envío
-                backend_url = request.backend_url or os.getenv("BACKEND_URL", "http://localhost:8765")
-                
-                return {
-                    "success": True,
-                    "message": "Audio send endpoint ready (implementation pending)",
-                    "file_info": {
-                        "filename": latest_file.name,
-                        "size_bytes": latest_file.stat().st_size,
-                        "target_backend": backend_url,
-                        "compress": request.compress
-                    },
-                    "timestamp": datetime.now().isoformat()
-                }
-                
-            except HTTPException:
-                raise
-            except Exception as e:
-                self.logger.error(f"Error sending audio to backend: {e}")
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail=f"Error sending audio to backend: {str(e)}"
-                )
-        
-        # HW-API-04: Endpoints de control de hardware
         @self.app.post("/led/pattern",
                       summary="Control LED Pattern",
                       description="Cambiar patrón de LED manualmente")

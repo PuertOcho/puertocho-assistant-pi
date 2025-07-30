@@ -116,10 +116,9 @@ Esta arquitectura promueve el bajo acoplamiento y la alta cohesión, facilitando
 - [ ] **8.9** Manejar timeouts y recuperación de errores (ej: volver a `IDLE` si algo falla).
 - [ ] **8.10** Implementar límite de tiempo máximo en estado LISTENING.
 
-### Hito 9: API HTTP y Endpoints (FASE 1 - PROJECT_TRACKER)
+### Hito 9: API HTTP y Endpoints (FASE 1 - PROJECT_TRACKER) ✅ COMPLETADO
 - [x] **9.1** Configurar FastAPI en `app/api/http_server.py` (HW-API-01) ✅
   - Implementar estructura base del servidor
-  - Configurar CORS y middlewares necesarios
   - Integrar con el StateManager existente
 - [x] **9.2** Implementar endpoints básicos (HW-API-02) ✅
   - `GET /health` - Estado del servicio hardware ✅
@@ -128,7 +127,6 @@ Esta arquitectura promueve el bajo acoplamiento y la alta cohesión, facilitando
 - [x] **9.3** Implementar endpoints de gestión de audio (HW-API-03) ✅
   - `GET /audio/capture` - Obtener último archivo de audio capturado ✅
   - `GET /audio/status` - Estado de audio, VAD y grabación ✅
-  - `POST /audio/send` - Endpoint para enviar audio al backend local ✅
   - `GET /audio/download/{filename}` - Descargar archivos de audio específicos ✅
 - [x] **9.4** Implementar endpoints de control de hardware (HW-API-04) ✅
   - `POST /led/pattern` - Cambiar patrón LED manualmente ✅
@@ -136,14 +134,25 @@ Esta arquitectura promueve el bajo acoplamiento y la alta cohesión, facilitando
   - `POST /button/simulate` - Simular eventos de botón para testing ✅
 - [x] **9.5** Configurar documentación y testing (HW-API-05) ✅
   - Añadir documentación OpenAPI/Swagger ✅
-  - Implementar middleware de logging ✅
-  - Crear tests básicos de endpoints ✅
+  - Implementar middleware de logging con request IDs ✅
+  - Crear tests completos de endpoints (13/13 tests passing) ✅
+  - Configurar CORS para desarrollo ✅
+  - Manejo robusto de errores HTTP ✅
+- [x] **9.6** Limpieza de código para comunicación consistente ✅
+  - Eliminado endpoint `/audio/send` innecesario ✅
+  - Actualizado puerto backend a 8000 en configuración ✅
+  - Simplificados tipos de mensajes WebSocket ✅
+  - Configuración de variables de entorno consistentes ✅
 
-### Hito 10: Comunicación WebSocket (FASE 2 - PROJECT_TRACKER)
+**Estado**: ✅ **COMPLETADO** - HTTP Server limpio con 13 endpoints funcionales
+
+### Hito 10: Comunicación WebSocket (FASE 4 - PROJECT_TRACKER) 
+**Nota**: Reagendado después de completar Backend Local para aprovechar nueva implementación
+
 - [ ] **10.1** Implementar cliente WebSocket (HW-WS-01)
-  - Conexión al backend local en puerto definido
+  - Conexión al backend local actualizado (puerto 8000)
   - Sistema de reconexión automática con backoff exponencial
-  - Manejo de errores y timeouts
+  - Manejo de errores y timeouts siguiendo patrón del HTTP server
 - [ ] **10.2** Implementar emisión de eventos desde hardware (HW-WS-02)
   - Audio capturado (envío automático cuando VAD termina)
   - Cambios de estado del StateManager
@@ -159,23 +168,27 @@ Esta arquitectura promueve el bajo acoplamiento y la alta cohesión, facilitando
   - Queue de mensajes para conexiones intermitentes
   - Heartbeat y keep-alive
 
-### Hito 11: Integración con Backend Local
-- [ ] **11.1** Configurar comunicación con backend local (referencia PROJECT_TRACKER FASE 3-4)
-  - Configurar endpoints del backend local para recibir datos del hardware
-  - Implementar formato de datos estándar para comunicación
-  - Configurar variables de entorno para endpoints
-- [ ] **11.2** Integrar envío automático de audio capturado
-  - Envío automático cuando VAD completa la captura
-  - Compresión de audio para transmisión eficiente
-  - Manejo de errores y reintentos
-- [ ] **11.3** Implementar sincronización de estados
-  - Sincronización bidireccional de estados entre hardware y backend
-  - Notificaciones de cambios de estado en tiempo real
-  - Manejo de conflictos de estado
+**Estado**: ⏸️ **POSPUESTO** hasta completar Hito 11 (Backend Local reimplementado)
+
+### Hito 11: Integración con Backend Local (Actualizado según Backend reimplementado)
+- [ ] **11.1** Esperar Backend Local Gateway (referencia PROJECT_TRACKER FASE 2)
+  - Backend local debe implementar endpoints para recibir datos del hardware
+  - Backend debe actuar como cliente HTTP del hardware (puerto 8080)
+  - Configurar variables de entorno para comunicación bidireccional
+- [ ] **11.2** Adaptar envío automático de audio si es necesario
+  - Verificar que endpoint `/audio/send` funciona con nuevo backend
+  - Configurar headers y formato esperado por nuevo backend
+  - Manejo de errores y reintentos ya implementado
+- [ ] **11.3** Probar sincronización de estados
+  - Verificar que backend local obtiene estados via `GET /state`
+  - Validar que cambios remotos llegan via `POST /state`
+  - Manejo de conflictos de estado entre hardware y backend
 - [ ] **11.4** Configurar sistema de configuración remota
-  - Recepción de configuraciones desde backend local
-  - Aplicación dinámica de configuraciones sin reinicio
+  - Recepción de configuraciones desde nuevo backend local
   - Validación de configuraciones recibidas
+  - Aplicación en tiempo real sin reinicio
+
+**Estado**: ⏸️ **BLOQUEADO** - Esperando reimplementación Backend Local (PROJECT_TRACKER Fase 2)
 
 ### Hito 12: Configuración y Persistencia
 - [ ] **12.1** Crear archivo de configuración YAML/JSON
@@ -311,26 +324,28 @@ puertocho-assistant-hardware/
 - 🔄 Documentar todas las configuraciones y calibraciones
 
 ### 🎯 Estado Actual del Proyecto
-**Hardware Base**: ✅ COMPLETADO (Hitos 1-5)
+**Hardware Base**: ✅ COMPLETADO (Hitos 1-9)
 - Contenedor Docker configurado y funcionando
 - Audio ReSpeaker operativo con grabación/reproducción
 - LEDs RGB APA102 con patrones dinámicos
 - Detección de botón GPIO con eventos y callbacks
 - Wake Word Detection con Porcupine funcionando
-
-**VAD y StateManager**: ✅ COMPLETADO (Hitos 6-8)
 - VAD implementado con captura de audio y resampling
 - StateManager con flujo completo de estados
-- Integración completa entre todos los componentes
-- Audio capturado y guardado localmente
+- **HTTP Server limpio con 13 endpoints funcionales**
+- **API completamente documentada con OpenAPI/Swagger**
+- **Tests completos (13/13 passing)**
+- **Comunicación con backend consistente (puerto 8000)**
 
-**API HTTP**: ✅ COMPLETADO (Hito 9)
-- FastAPI configurado con 14 endpoints funcionales
-- Documentación OpenAPI/Swagger automática
-- Middleware de logging con request tracking
-- Tests completos de endpoints (14/14 tests passing)
+**Próximos Pasos Prioritarios**: 
+1. 🔄 **Esperar reimplementación Backend Local** (PROJECT_TRACKER Fase 2)
+2. 🔌 **Implementar WebSocket Cliente** una vez el backend esté listo (Hito 10)
+3. 🤝 **Integración bidireccional** con nuevo backend (Hito 11)
+
+**Decisión Arquitectónica**: Hardware mantiene el control principal, Backend actúa como cliente/gateway
 - CORS configurado para desarrollo
 - Manejo robusto de errores HTTP
+- Configuración de variables de entorno consistente entre servicios
 
 **Próximo Objetivo**: 🚀 WebSocket (Hito 10) → Integración Backend (Hito 11)
 - Implementar endpoints HTTP para comunicación local

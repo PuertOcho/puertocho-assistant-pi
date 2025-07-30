@@ -1,53 +1,96 @@
-# PuertoCho Assistant Backend
+# PuertoCho Assistant Backend Local
 
-## Descripción General
+## ⚠️ Estado del Proyecto: REIMPLEMENTACIÓN NECESARIA
 
-Este servicio es el **sistema nervioso central** del Asistente PuertoCho. Actúa como un **Gateway y Orquestador**, gestionando el estado del asistente y coordinando la comunicación entre el cliente de hardware (`puertocho-assistant-hardware`), la interfaz de usuario (`puertocho-assistant-web-view`), y los futuros servicios de procesamiento (NLU, TTS, etc.).
+Este servicio está siendo **completamente reimplementado** para alinearse con la nueva arquitectura del hardware que ya cuenta con un HTTP Server robusto y funcional.
 
-Su función principal es centralizar la lógica de estado (`idle`, `listening`, `processing`, `error`) y distribuir esta información a todos los componentes conectados, asegurando una experiencia de usuario coherente.
+### 📋 Situación Actual
 
-## Arquitectura y Comunicación
+**❌ Backend Actual (Obsoleto)**:
+- Simula estados en lugar de obtenerlos del hardware real
+- No tiene cliente HTTP para comunicarse con hardware:8080
+- WebSocket simplificado sin manejo robusto
+- Procesamiento hardcodeado sin backend remoto
 
-El backend está diseñado en torno a una **API REST** para la comunicación con el hardware y un servidor **WebSocket** para la comunicación en tiempo real con la interfaz web.
+**✅ Hardware Funcional**:
+- HTTP Server con 14 endpoints operativos
+- StateManager robusto con estados bien definidos
+- API completa documentada con OpenAPI/Swagger
+- Tests completos (14/14 passing)
+
+### 🎯 Nueva Arquitectura Backend Local
+
+El backend local debe funcionar como **Gateway** entre hardware funcional y servicios remotos:
 
 ```
-┌──────────────────────┐     HTTP POST     ┌───────────────────┐     WebSocket     ┌───────────────────┐
-│  Hardware Service    ├──────────────────►│   Backend API     │◄──────────────────►│   Web Dashboard   │
-│ (Envía audio/estado) │                   │    (Gateway)      │                   │  (Muestra estado) │
-└──────────────────────┘                   └───────────────────┘                   └───────────────────┘
-                                                     │
-                                                     ▼
-                                          (Futuro) Servicios Externos
-                                             (STT, NLU, Chat, etc.)
+┌─────────────────┐     HTTP     ┌─────────────────┐     HTTP/WS     ┌─────────────────┐
+│                 │─────────────▶│                 │────────────────▶│                 │
+│  HARDWARE       │              │  BACKEND LOCAL  │                 │ BACKEND REMOTO  │
+│  (Puerto 8080)  │◀─────────────│  (Puerto 8000)  │◀────────────────│ (Procesamiento) │
+│                 │              │                 │                 │                 │
+└─────────────────┘              └─────────────────┘                 └─────────────────┘
+        │                                │                                    │
+        │                                │                                    │
+        ▼                                ▼                                    ▼
+ 📱 HTTP API                     🌐 Gateway                         🤖 IA/STT/TTS
+ 📡 StateManager                📊 Métricas                        ☁️ Cloud Services
+ 🎙️ Audio/VAD                  🔄 Buffer                          📈 Analytics
 ```
 
-El flujo de comunicación es el siguiente:
-1.  El **Hardware Service** detecta la palabra de activación, graba un comando de voz y lo envía al endpoint `POST /api/v1/audio/process`.
-2.  El **Backend API** recibe el audio:
-    a. Cambia el estado del asistente a `processing`.
-    b. Notifica este cambio a todos los clientes **Web Dashboard** conectados vía WebSocket.
-    c. (Futuro) Envía el audio a un servicio de STT/NLU.
-    d. Recibe el resultado, lo registra y lo envía al Web Dashboard.
-    e. Vuelve al estado `idle` y lo notifica.
-3.  Paralelamente, el **Hardware Service** envía su estado (micrófono OK, etc.) al endpoint `POST /api/v1/hardware/status`, y el backend lo retransmite a los dashboards.
+### 🔄 Plan de Reimplementación
 
-## API de Comunicación
+**Ver archivo detallado**: [`REIMPLEMENTATION_PLAN.md`](./REIMPLEMENTATION_PLAN.md)
 
-### Endpoints REST (Prefijo: `/api/v1`)
+#### Responsabilidades del Nuevo Backend:
 
--   `POST /audio/process`:
-    -   **Descripción**: Recibe un archivo de audio del servicio de hardware para su procesamiento.
-    -   **Body**: `multipart/form-data` con un campo `audio` que contiene el archivo `.wav`.
-    -   **Respuesta**: JSON con el estado del procesamiento y la transcripción (simulada por ahora).
+1. **🔗 Cliente del Hardware**: Consumir API del hardware (puerto 8080)
+2. **📡 Servidor WebSocket**: Servir frontend en tiempo real  
+3. **🎙️ Procesador de Audio**: Buffer y envío a backend remoto
+4. **📊 Agregador de Estados**: Combinar hardware + backend + remoto
+5. **🔄 Buffer Inteligente**: Cola cuando backend remoto no disponible
 
--   `POST /hardware/status`:
-    -   **Descripción**: Recibe un objeto JSON con el estado actual del hardware.
-    -   **Body**: Objeto JSON con el estado del hardware (ej. `{"microphone_ok": true, "state": "idle"}`).
-    -   **Respuesta**: JSON confirmando la recepción.
+## 📋 Elementos Reutilizables del Backend Actual
 
-### WebSocket
+### ✅ Mantener
+- `Dockerfile.alternative` (Alpine optimizado)
+- `requirements.txt` (dependencias básicas)
+- Estructura FastAPI + uvicorn
+- Middleware CORS básico
 
--   **URL**: `ws://<host>:8000/ws`
+### 🔄 Actualizar Completamente
+- `src/main.py` → Gateway principal
+- `src/core/state_manager.py` → Cliente del hardware  
+- `src/core/websocket_manager.py` → WebSocket robusto
+- `src/api_v1.py` → Endpoints de gateway
+
+### ➕ Añadir Nuevo
+- `src/clients/hardware_client.py` → Cliente HTTP hardware:8080
+- `src/services/audio_processor.py` → Buffer y cola de audio
+- `src/services/remote_client.py` → Cliente backend remoto
+- `src/middleware/logging.py` → Logging estructurado
+
+## 🚀 Próximos Pasos
+
+1. **📋 Revisar Plan Detallado**: [`REIMPLEMENTATION_PLAN.md`](./REIMPLEMENTATION_PLAN.md)
+2. **🧹 Limpiar Código Actual**: Mantener elementos reutilizables
+3. **🔌 Implementar Cliente Hardware**: Consumir API puerto 8080
+4. **📊 StateManager Gateway**: Replicar estado del hardware  
+5. **🎙️ Pipeline de Audio**: Buffer → Backend remoto
+6. **🧪 Tests de Integración**: Hardware ↔ Backend funcional
+
+## 📖 API Actual (OBSOLETA)
+
+> ⚠️ **La API actual será reemplazada completamente**
+
+### Endpoints REST (Serán Eliminados)
+
+-   `POST /audio/process`: Simula procesamiento (será reemplazado)
+-   `POST /hardware/status`: Recibe estado simulado (será cliente activo)
+
+### WebSocket (Será Actualizado)
+
+-   **URL Actual**: `ws://<host>:8000/ws` (se mantendrá para frontend)
+-   **Cambios**: Transmitirá datos reales del hardware en lugar de simulaciones
 -   **Descripción**: Canal principal para la comunicación en tiempo real con la interfaz web.
 
 #### Mensajes del Backend hacia el Cliente
