@@ -2,25 +2,187 @@
 """
 AudioResampler - Clase wrapper para resampling de audio optimizado.
 
-Esta clase encapsula las funciones de resampling existentes en audio_resampling.py
+Esta clase encapsula funciones de resampling de audio optimizadas
 añadiendo cache, procesamiento por chunks y una API más limpia para uso en
 los componentes core.
 """
 
 import numpy as np
 import time
+import logging
 from typing import Dict, Tuple, Optional, Union
 from dataclasses import dataclass
-from utils.logger import logger, log_performance_metric
-from utils.audio_resampling import (
-    simple_resample,
-    convert_stereo_to_mono,
-    normalize_audio,
-    prepare_audio_for_processing,
-    prepare_for_vad,
-    prepare_for_wake_word,
-    prepare_for_porcupine
-)
+
+# Try to import custom logger, fallback to standard logging
+try:
+    from utils.logger import logger, log_performance_metric
+except (ImportError, PermissionError):
+    logger = logging.getLogger(__name__)
+    def log_performance_metric(metric_name, value, unit):
+        logger.debug(f"Performance metric: {metric_name} = {value} {unit}")
+
+
+# Audio processing functions (integrated from previous audio_resampling module)
+def simple_resample(audio: np.ndarray, orig_sr: int, target_sr: int) -> np.ndarray:
+    """
+    Resampling simple usando interpolación lineal con numpy.
+    
+    Esta función es compatible con ARM64 y no requiere dependencias pesadas
+    como scipy o librosa. Usa interpolación lineal que es suficiente para
+    las necesidades de audio del proyecto.
+    
+    Args:
+        audio: Array de audio a resamplear (mono, formato float32)
+        orig_sr: Sample rate original
+        target_sr: Sample rate objetivo
+        
+    Returns:
+        Array de audio resampleado al target_sr
+    """
+    if orig_sr == target_sr:
+        return audio
+    
+    # Calcular el factor de resampling
+    ratio = target_sr / orig_sr
+    
+    # Calcular la nueva longitud
+    new_length = int(len(audio) * ratio)
+    
+    if new_length == 0:
+        logger.warning(f"Resampling resulted in 0 length array. Original: {len(audio)}, ratio: {ratio}")
+        return np.array([], dtype=audio.dtype)
+    
+    # Crear índices para interpolación
+    old_indices = np.linspace(0, len(audio) - 1, new_length)
+    
+    # Interpolar usando numpy
+    resampled = np.interp(old_indices, np.arange(len(audio)), audio)
+    
+    return resampled.astype(audio.dtype)
+
+
+def convert_stereo_to_mono(stereo_audio: np.ndarray) -> np.ndarray:
+    """
+    Convierte audio estéreo a mono promediando ambos canales.
+    
+    Args:
+        stereo_audio: Array de audio estéreo shape [samples, 2] o [samples*2]
+        
+    Returns:
+        Audio mono shape [samples]
+    """
+    if len(stereo_audio.shape) == 2:
+        # Audio con shape [samples, 2]
+        return np.mean(stereo_audio, axis=1, dtype=stereo_audio.dtype)
+    elif len(stereo_audio.shape) == 1 and len(stereo_audio) % 2 == 0:
+        # Audio interleaved [L, R, L, R, ...]
+        return np.mean(stereo_audio.reshape(-1, 2), axis=1, dtype=stereo_audio.dtype)
+    else:
+        # Ya es mono o formato desconocido
+        return stereo_audio
+
+
+def normalize_audio(audio: np.ndarray, target_dtype: type = np.float32) -> np.ndarray:
+    """
+    Normaliza audio a un rango específico según el tipo de dato.
+    
+    Args:
+        audio: Array de audio a normalizar
+        target_dtype: Tipo de dato objetivo (np.float32, np.int16, etc.)
+        
+    Returns:
+        Audio normalizado al tipo especificado
+    """
+    if target_dtype == np.float32:
+        if audio.dtype == np.int16:
+            return audio.astype(np.float32) / 32767.0
+        elif audio.dtype == np.int32:
+            return audio.astype(np.float32) / 2147483647.0
+        else:
+            # Ya es float, asegurar rango [-1, 1]
+            return np.clip(audio.astype(np.float32), -1.0, 1.0)
+    
+    elif target_dtype == np.int16:
+        if audio.dtype in [np.float32, np.float64]:
+            # Asegurar rango [-1, 1] y convertir
+            clipped = np.clip(audio, -1.0, 1.0)
+            return (clipped * 32767).astype(np.int16)
+        else:
+            return audio.astype(np.int16)
+    
+    else:
+        return audio.astype(target_dtype)
+
+
+def prepare_audio_for_processing(
+    audio: np.ndarray, 
+    input_sr: int, 
+    target_sr: int, 
+    target_dtype: type = np.float32
+) -> np.ndarray:
+    """
+    Función todo-en-uno para preparar audio para procesamiento.
+    
+    Convierte de estéreo a mono, normaliza, y resamplea en un solo paso.
+    
+    Args:
+        audio: Audio de entrada (puede ser estéreo o mono)
+        input_sr: Sample rate de entrada
+        target_sr: Sample rate objetivo
+        target_dtype: Tipo de dato objetivo
+        
+    Returns:
+        Audio preparado: mono, normalizado, y resampleado
+    """
+    # Convertir a mono si es necesario
+    if len(audio.shape) == 2:
+        audio = convert_stereo_to_mono(audio)
+    
+    # Normalizar
+    audio = normalize_audio(audio, target_dtype)
+    
+    # Resamplear si es necesario
+    if input_sr != target_sr:
+        audio = simple_resample(audio, input_sr, target_sr)
+    
+    return audio
+
+
+def prepare_for_vad(audio: np.ndarray, input_sr: int = 44100) -> np.ndarray:
+    """Prepara audio para VAD: mono, float32, 16kHz"""
+    return prepare_audio_for_processing(audio, input_sr, 16000, np.float32)
+
+
+def prepare_for_wake_word(audio: np.ndarray, input_sr: int = 44100) -> np.ndarray:
+    """Prepara audio para wake word: mono, float32, 16kHz"""
+    return prepare_audio_for_processing(audio, input_sr, 16000, np.float32)
+
+
+def prepare_for_porcupine(audio: np.ndarray, input_sr: int = 44100, frame_length: int = 512) -> np.ndarray:
+    """
+    Prepara audio específicamente para Porcupine: mono, int16, 16kHz, frame exacto.
+    
+    Args:
+        audio: Audio de entrada
+        input_sr: Sample rate de entrada
+        frame_length: Longitud exacta del frame requerido por Porcupine
+        
+    Returns:
+        Audio preparado como int16 con longitud exacta
+    """
+    # Preparar audio básico
+    prepared = prepare_audio_for_processing(audio, input_sr, 16000, np.float32)
+    
+    # Ajustar longitud exacta
+    if len(prepared) < frame_length:
+        # Pad con ceros
+        prepared = np.pad(prepared, (0, frame_length - len(prepared)))
+    elif len(prepared) > frame_length:
+        # Truncar
+        prepared = prepared[:frame_length]
+    
+    # Convertir a int16 para Porcupine
+    return normalize_audio(prepared, np.int16)
 
 
 @dataclass
@@ -47,8 +209,7 @@ class AudioResampler:
     """
     Wrapper para operaciones de resampling de audio con cache y optimizaciones.
     
-    Esta clase encapsula las funciones optimizadas de audio_resampling.py
-    añadiendo:
+    Esta clase integra las funciones de resampling optimizadas añadiendo:
     - Cache de configuraciones frecuentes
     - Procesamiento por chunks eficiente
     - Métricas de rendimiento

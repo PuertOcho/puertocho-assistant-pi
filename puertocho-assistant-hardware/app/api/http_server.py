@@ -141,15 +141,15 @@ class HTTPServer:
         
         @self.app.get("/health", 
                      summary="Health Check",
-                     description="Verificar el estado del servicio hardware")
+                     description="Verificar estado de salud del servicio de hardware")
         async def health_check():
-            """Estado del servicio hardware"""
+            """Health check endpoint"""
             return {
-                "status": "ok",
+                "status": "healthy",
                 "timestamp": datetime.now().isoformat(),
                 "service": "puertocho-hardware",
                 "version": "1.0.0",
-                "hardware_state": self.state_manager.state.name
+                "hardware_state": self.state_manager.get_current_state().name
             }
         
         @self.app.get("/state", 
@@ -157,15 +157,22 @@ class HTTPServer:
                      description="Obtener el estado actual del StateManager")
         async def get_state():
             """Obtener estado actual del StateManager"""
-            listening_duration = None
-            if self.state_manager.listening_start_time:
-                listening_duration = datetime.now().timestamp() - self.state_manager.listening_start_time
+            # Usar la nueva API del StateManager refactorizado
+            current_state = self.state_manager.get_current_state()
+            time_in_current_state = self.state_manager.get_time_in_current_state()
+            stats = self.state_manager.get_stats()
             
             return {
-                "state": self.state_manager.state.name,
+                "state": current_state.name,
                 "timestamp": datetime.now().isoformat(),
-                "listening_start_time": self.state_manager.listening_start_time,
-                "listening_duration_seconds": listening_duration
+                "time_in_current_state_seconds": time_in_current_state,
+                "previous_state": self.state_manager.get_previous_state().name if self.state_manager.get_previous_state() else None,
+                "stats": {
+                    "total_transitions": stats["total_transitions"],
+                    "current_state_duration": stats["current_state_duration"],
+                    "registered_components": stats["registered_components"],
+                    "component_count": stats["component_count"]
+                }
             }
         
         @self.app.post("/state", 
@@ -177,18 +184,27 @@ class HTTPServer:
                 # Validar que el estado existe
                 new_state = AssistantState[request.state.upper()]
                 
-                # Cambiar estado
-                old_state = self.state_manager.state.name
-                self.state_manager.set_state(new_state)
+                # Cambiar estado usando la nueva API
+                old_state = self.state_manager.get_current_state().name
+                success = self.state_manager.set_state(new_state, {
+                    "source": "http_api",
+                    "manual_change": True
+                })
                 
-                self.logger.info(f"Manual state change: {old_state} -> {new_state.name}")
-                
-                return {
-                    "success": True,
-                    "old_state": old_state,
-                    "new_state": new_state.name,
-                    "timestamp": datetime.now().isoformat()
-                }
+                if success:
+                    self.logger.info(f"Manual state change: {old_state} -> {new_state.name}")
+                    
+                    return {
+                        "success": True,
+                        "old_state": old_state,
+                        "new_state": new_state.name,
+                        "timestamp": datetime.now().isoformat()
+                    }
+                else:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"State transition rejected: {old_state} -> {new_state.name}"
+                    )
                 
             except KeyError:
                 valid_states = [state.name for state in AssistantState]
@@ -302,24 +318,25 @@ class HTTPServer:
         async def get_audio_status():
             """Estado de audio, VAD y grabación"""
             try:
-                # Información básica del estado
+                # Información básica del estado usando nueva API
+                current_state = self.state_manager.get_current_state()
+                stats = self.state_manager.get_stats()
+                
                 audio_status = {
-                    "hardware_state": self.state_manager.state.name,
-                    "is_listening": self.state_manager.state == AssistantState.LISTENING,
-                    "vad_enabled": self.state_manager.vad_handler is not None,
-                    "timestamp": datetime.now().isoformat()
+                    "hardware_state": current_state.name,
+                    "is_listening": current_state == AssistantState.LISTENING,
+                    "time_in_current_state": self.state_manager.get_time_in_current_state(),
+                    "timestamp": datetime.now().isoformat(),
+                    "total_transitions": stats.get("total_transitions", 0),
+                    "registered_components": stats.get("registered_components", [])
                 }
                 
-                # Información del VAD si está disponible
-                if self.state_manager.vad_handler:
-                    vad_info = {
-                        "sample_rate": self.state_manager.vad_handler.sample_rate,
-                        "input_sample_rate": self.state_manager.vad_handler.input_sample_rate,
-                        "frame_duration": self.state_manager.vad_handler.frame_duration,
-                        "silence_timeout": self.state_manager.vad_handler.silence_timeout,
-                        "in_speech": self.state_manager.vad_handler._in_speech,
-                    }
-                    audio_status["vad"] = vad_info
+                # Información del VAD no está disponible directamente desde StateManager refactorizado
+                # El StateManager ahora es un coordinador puro sin referencias a componentes específicos
+                audio_status["vad"] = {
+                    "note": "VAD info not available through StateManager - use /components endpoint",
+                    "registered_components": stats.get("registered_components", [])
+                }
                 
                 # Estadísticas de archivos capturados
                 captured_dir = Path("/app/captured_audio")
@@ -339,10 +356,12 @@ class HTTPServer:
                         "total_size_mb": 0
                     }
                 
-                # Información de tiempo de escucha
-                if self.state_manager.listening_start_time:
-                    listening_duration = datetime.now().timestamp() - self.state_manager.listening_start_time
+                # Información de tiempo de escucha usando nueva API
+                if current_state == AssistantState.LISTENING:
+                    listening_duration = self.state_manager.get_time_in_current_state()
                     audio_status["listening_duration_seconds"] = round(listening_duration, 2)
+                else:
+                    audio_status["listening_duration_seconds"] = 0
                 
                 return {
                     "success": True,
@@ -492,28 +511,32 @@ class HTTPServer:
                 # Métricas de hardware (si están disponibles)
                 hardware_metrics = {}
                 
-                # StateManager status
+                # StateManager status usando nueva API
                 if self.state_manager:
+                    current_state = self.state_manager.get_current_state()
+                    stats = self.state_manager.get_stats()
+                    
                     hardware_metrics["state_manager"] = {
-                        "current_state": self.state_manager.state.name,
-                        "is_listening": self.state_manager.state == AssistantState.LISTENING,
-                        "captured_audio_buffers": len(self.state_manager.captured_audio_buffer)
+                        "current_state": current_state.name,
+                        "is_listening": current_state == AssistantState.LISTENING,
+                        "time_in_current_state": self.state_manager.get_time_in_current_state(),
+                        "total_transitions": stats.get("total_transitions", 0),
+                        "registered_components": stats.get("registered_components", []),
+                        "component_count": stats.get("component_count", 0)
                     }
                     
-                    if self.state_manager.listening_start_time:
-                        listening_duration = time.time() - self.state_manager.listening_start_time
+                    if current_state == AssistantState.LISTENING:
+                        listening_duration = self.state_manager.get_time_in_current_state()
                         hardware_metrics["state_manager"]["listening_duration_seconds"] = round(listening_duration, 2)
                 
                 # LED Controller status
-                if hasattr(self.state_manager, 'led_controller') and self.state_manager.led_controller:
-                    led_controller = self.state_manager.led_controller
-                    hardware_metrics["led_controller"] = {
-                        "current_state": led_controller.current_state.name if led_controller.current_state else "unknown",
-                        "brightness": led_controller.brightness,
-                        "num_leds": led_controller.num_leds,
-                        "animation_running": led_controller.animation_running,
-                        "simulate": led_controller.simulate
-                    }
+                # En la nueva arquitectura, el StateManager no mantiene referencias directas
+                # El LED Controller es gestionado a través de adaptadores
+                hardware_metrics["led_controller"] = {
+                    "note": "LED Controller managed through StateManager adapters",
+                    "registered_components": stats.get("registered_components", []),
+                    "led_adapter_registered": "LEDController" in stats.get("registered_components", [])
+                }
                 
                 # Audio status
                 captured_dir = Path("/app/captured_audio")
