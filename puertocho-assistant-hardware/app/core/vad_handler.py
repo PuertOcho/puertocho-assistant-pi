@@ -1,11 +1,11 @@
 import webrtcvad
 import numpy as np
 import collections
-import logging
 from typing import Optional, Callable
 import io
 import wave
 from utils.audio_resampler import AudioResampler
+from utils.logger import HardwareLogger, log_audio_event
 
 class VADHandler:
     """
@@ -37,11 +37,19 @@ class VADHandler:
         self._in_speech = False
         self._last_voice_time = None
         self._pre_buffer = collections.deque(maxlen=10)  # Pre-buffer para incluir audio antes del habla
-        self.logger = logging.getLogger("vad_handler")
+        self.logger = HardwareLogger("vad_handler")
         
         self.logger.info(f"VADHandler initialized: target_sr={sample_rate}, input_sr={input_sample_rate}, "
                         f"frame_duration={frame_duration}ms, aggressiveness={aggressiveness}, "
                         f"silence_timeout={silence_timeout}s")
+        
+        log_audio_event("vad_handler_initialized", {
+            "target_sample_rate": sample_rate,
+            "input_sample_rate": input_sample_rate,
+            "frame_duration": frame_duration,
+            "aggressiveness": aggressiveness,
+            "silence_timeout": silence_timeout
+        })
 
     def process_audio_chunk(self, audio_data, timestamp=None):
         """

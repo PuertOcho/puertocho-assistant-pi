@@ -8,23 +8,19 @@ Notifica eventos al StateManager a través de callbacks.
 
 import time
 import threading
-import logging
 from typing import Callable, Optional, Dict, Any
 from enum import Enum
 from dataclasses import dataclass
+from utils.logger import HardwareLogger, log_hardware_event
 
 try:
     import RPi.GPIO as GPIO
     GPIO_AVAILABLE = True
 except ImportError:
     GPIO_AVAILABLE = False
-    logging.warning("RPi.GPIO not available, ButtonHandler will run in simulation mode")
+    # Manejaremos el warning en la clase
 
 from config import config
-from utils.logger import get_logger
-
-# Configurar logger
-logger = get_logger(__name__)
 
 class ButtonEvent(Enum):
     """Tipos de eventos de botón"""
@@ -64,10 +60,17 @@ class ButtonHandler:
             long_press_time: Tiempo para considerar pulsación larga (default: config.gpio.long_press_time)
             simulate: Modo simulación (default: config.app.simulate_hardware)
         """
+        # Initialize HardwareLogger
+        self.logger = HardwareLogger("button_handler")
+        
         self.pin = pin or config.gpio.button_pin
         self.debounce_time = debounce_time or config.gpio.debounce_time
         self.long_press_time = long_press_time or config.gpio.long_press_time
         self.simulate = simulate if simulate is not None else config.simulate_hardware
+        
+        # Log warning if GPIO not available
+        if not GPIO_AVAILABLE:
+            self.logger.warning("RPi.GPIO not available, ButtonHandler will run in simulation mode")
         
         # Estado interno
         self._is_running = False
@@ -82,7 +85,7 @@ class ButtonHandler:
         if GPIO_AVAILABLE and not self.simulate:
             self._setup_gpio()
         else:
-            logger.info(f"ButtonHandler iniciado en modo simulación (pin: {self.pin})")
+            self.logger.info(f"ButtonHandler iniciado en modo simulación (pin: {self.pin})")
     
     def _setup_gpio(self):
         """Configurar GPIO para el botón"""
@@ -94,12 +97,12 @@ class ButtonHandler:
             # Configurar interrupción para ambos flancos
             GPIO.add_event_detect(self.pin, GPIO.BOTH, callback=self._gpio_callback, bouncetime=int(self.debounce_time * 1000))
             
-            logger.info(f"GPIO configurado correctamente para pin {self.pin}")
+            self.logger.info(f"GPIO configurado correctamente para pin {self.pin}")
             
         except Exception as e:
-            logger.error(f"Error configurando GPIO: {e}")
+            self.logger.error(f"Error configurando GPIO: {e}")
             self.simulate = True
-            logger.info("Cambiando a modo simulación debido a error en GPIO")
+            self.logger.info("Cambiando a modo simulación debido a error en GPIO")
     
     def _gpio_callback(self, channel):
         """Callback para interrupciones GPIO"""
@@ -129,7 +132,7 @@ class ButtonHandler:
             self._is_pressed = True
             self._press_start_time = timestamp
         
-        logger.debug(f"Botón presionado en pin {self.pin}")
+        self.logger.debug(f"Botón presionado en pin {self.pin}")
         
         # Notificar evento de inicio de pulsación
         self._notify_event(ButtonEvent.PRESS_START, 0, timestamp)
@@ -148,7 +151,7 @@ class ButtonHandler:
             self._is_pressed = False
             press_duration = timestamp - self._press_start_time if self._press_start_time else 0
         
-        logger.debug(f"Botón liberado en pin {self.pin}, duración: {press_duration:.2f}s")
+        self.logger.debug(f"Botón liberado en pin {self.pin}, duración: {press_duration:.2f}s")
         
         # Notificar evento de fin de pulsación
         self._notify_event(ButtonEvent.PRESS_END, press_duration, timestamp)
@@ -167,7 +170,7 @@ class ButtonHandler:
             if self._is_pressed:
                 # Todavía está presionado después del tiempo de pulsación larga
                 press_duration = time.time() - self._press_start_time if self._press_start_time else 0
-                logger.debug(f"Pulsación larga detectada en pin {self.pin}, duración: {press_duration:.2f}s")
+                self.logger.debug(f"Pulsación larga detectada en pin {self.pin}, duración: {press_duration:.2f}s")
     
     def _notify_event(self, event_type: ButtonEvent, press_duration: float, timestamp: float):
         """Notificar evento a callbacks registrados"""
@@ -183,14 +186,14 @@ class ButtonHandler:
             try:
                 self._callbacks[event_type](event_data)
             except Exception as e:
-                logger.error(f"Error en callback para evento {event_type}: {e}")
+                self.logger.error(f"Error en callback para evento {event_type}: {e}")
         
         # Notificar a callback general si existe
         if ButtonEvent.PRESS_START in self._callbacks and event_type != ButtonEvent.PRESS_START:
             try:
                 self._callbacks[ButtonEvent.PRESS_START](event_data)
             except Exception as e:
-                logger.error(f"Error en callback general para evento {event_type}: {e}")
+                self.logger.error(f"Error en callback general para evento {event_type}: {e}")
     
     def register_callback(self, event_type: ButtonEvent, callback: Callable[[ButtonEventData], None]):
         """
@@ -201,7 +204,7 @@ class ButtonHandler:
             callback: Función a llamar cuando ocurra el evento
         """
         self._callbacks[event_type] = callback
-        logger.debug(f"Callback registrado para evento {event_type.value}")
+        self.logger.debug(f"Callback registrado para evento {event_type.value}")
     
     def unregister_callback(self, event_type: ButtonEvent):
         """
@@ -212,7 +215,7 @@ class ButtonHandler:
         """
         if event_type in self._callbacks:
             del self._callbacks[event_type]
-            logger.debug(f"Callback desregistrado para evento {event_type.value}")
+            self.logger.debug(f"Callback desregistrado para evento {event_type.value}")
     
     def simulate_button_press(self, duration: float = 0.1):
         """
@@ -222,7 +225,7 @@ class ButtonHandler:
             duration: Duración de la pulsación en segundos
         """
         if not self.simulate:
-            logger.warning("simulate_button_press() solo funciona en modo simulación")
+            self.logger.warning("simulate_button_press() solo funciona en modo simulación")
             return
         
         timestamp = time.time()
@@ -257,11 +260,11 @@ class ButtonHandler:
     def start(self):
         """Iniciar ButtonHandler"""
         if self._is_running:
-            logger.warning("ButtonHandler ya está ejecutándose")
+            self.logger.warning("ButtonHandler ya está ejecutándose")
             return
         
         self._is_running = True
-        logger.info(f"ButtonHandler iniciado en pin {self.pin} (simulate: {self.simulate})")
+        self.logger.info(f"ButtonHandler iniciado en pin {self.pin} (simulate: {self.simulate})")
     
     def stop(self):
         """Detener ButtonHandler"""
@@ -275,14 +278,14 @@ class ButtonHandler:
             try:
                 GPIO.remove_event_detect(self.pin)
                 GPIO.cleanup(self.pin)
-                logger.info(f"GPIO limpiado para pin {self.pin}")
+                self.logger.info(f"GPIO limpiado para pin {self.pin}")
             except Exception as e:
-                logger.error(f"Error limpiando GPIO: {e}")
+                self.logger.error(f"Error limpiando GPIO: {e}")
         
         # Limpiar callbacks
         self._callbacks.clear()
         
-        logger.info("ButtonHandler detenido")
+        self.logger.info("ButtonHandler detenido")
     
     def __del__(self):
         """Destructor para limpiar recursos"""

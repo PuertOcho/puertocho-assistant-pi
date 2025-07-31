@@ -6,14 +6,13 @@ Implementa un sistema de eventos centralizado que permite comunicación
 entre componentes sin crear dependencias directas.
 """
 
-import logging
 from typing import Dict, List, Callable, Any, Optional
 from dataclasses import dataclass
 from enum import Enum, auto
 import time
 import threading
 import queue
-from utils.logger import logger, log_hardware_event
+from utils.logger import HardwareLogger, log_hardware_event
 
 
 class EventType(Enum):
@@ -79,6 +78,9 @@ class EventBus:
     """
     
     def __init__(self, async_processing: bool = True, max_queue_size: int = 1000):
+        # Initialize HardwareLogger
+        self.logger = HardwareLogger("event_bus")
+        
         self._handlers: Dict[EventType, List[Callable[[Event], None]]] = {
             event_type: [] for event_type in EventType
         }
@@ -108,7 +110,7 @@ class EventBus:
         if self._async_processing:
             self._start_processing_thread()
         
-        logger.info(f"EventBus initialized (async={async_processing})")
+        self.logger.info(f"EventBus initialized (async={async_processing})")
     
     def _start_processing_thread(self) -> None:
         """Inicia el hilo de procesamiento asíncrono"""
@@ -118,7 +120,7 @@ class EventBus:
             daemon=True
         )
         self._processing_thread.start()
-        logger.debug("EventBus async processing thread started")
+        self.logger.debug("EventBus async processing thread started")
     
     def _process_events_async(self) -> None:
         """Procesa eventos de forma asíncrona"""
@@ -131,7 +133,7 @@ class EventBus:
             except queue.Empty:
                 continue
             except Exception as e:
-                logger.error(f"Error in async event processing: {e}")
+                self.logger.error(f"Error in async event processing: {e}")
                 self._stats["events_failed"] += 1
     
     def subscribe(self, event_type: EventType, handler: Callable[[Event], None]) -> None:
@@ -146,7 +148,7 @@ class EventBus:
             self._handlers[event_type].append(handler)
             self._stats["handler_count"] += 1
         
-        logger.debug(f"Handler subscribed to {event_type.name}")
+        self.logger.debug(f"Handler subscribed to {event_type.name}")
     
     def subscribe_wildcard(self, handler: Callable[[Event], None]) -> None:
         """
@@ -159,7 +161,7 @@ class EventBus:
             self._wildcard_handlers.append(handler)
             self._stats["handler_count"] += 1
         
-        logger.debug("Wildcard handler subscribed")
+        self.logger.debug("Wildcard handler subscribed")
     
     def unsubscribe(self, event_type: EventType, handler: Callable[[Event], None]) -> bool:
         """
@@ -176,7 +178,7 @@ class EventBus:
             if handler in self._handlers[event_type]:
                 self._handlers[event_type].remove(handler)
                 self._stats["handler_count"] -= 1
-                logger.debug(f"Handler unsubscribed from {event_type.name}")
+                self.logger.debug(f"Handler unsubscribed from {event_type.name}")
                 return True
             return False
     
@@ -190,7 +192,7 @@ class EventBus:
         with self._lock:
             self._event_filters.append(filter_func)
         
-        logger.debug("Event filter added")
+        self.logger.debug("Event filter added")
     
     def publish(self, event_type: EventType, source: str, data: Dict[str, Any] = None) -> None:
         """
@@ -217,7 +219,7 @@ class EventBus:
             try:
                 self._event_queue.put_nowait(event)
             except queue.Full:
-                logger.warning("EventBus queue full, dropping event")
+                self.logger.warning("EventBus queue full, dropping event")
                 self._stats["events_failed"] += 1
         else:
             self._process_event(event)
@@ -232,7 +234,7 @@ class EventBus:
                     self._stats["events_filtered"] += 1
                     return
             except Exception as e:
-                logger.error(f"Error in event filter: {e}")
+                self.logger.error(f"Error in event filter: {e}")
         
         handlers_executed = 0
         
@@ -242,7 +244,7 @@ class EventBus:
                 handler(event)
                 handlers_executed += 1
             except Exception as e:
-                logger.error(f"Error in event handler: {e}")
+                self.logger.error(f"Error in event handler: {e}")
                 self._stats["events_failed"] += 1
                 self._stats["processing_errors"].append({
                     "timestamp": time.time(),
@@ -256,14 +258,14 @@ class EventBus:
                 handler(event)
                 handlers_executed += 1
             except Exception as e:
-                logger.error(f"Error in wildcard handler: {e}")
+                self.logger.error(f"Error in wildcard handler: {e}")
                 self._stats["events_failed"] += 1
         
         self._stats["events_processed"] += 1
         
         # Log para eventos importantes
         if event.event_type in [EventType.WAKE_WORD_DETECTED, EventType.STATE_CHANGED]:
-            logger.debug(f"Event processed: {event.event_type.name} from {event.source}")
+            self.logger.debug(f"Event processed: {event.event_type.name} from {event.source}")
             log_hardware_event("event_processed", {
                 "event_type": event.event_type.name,
                 "source": event.source,
@@ -301,14 +303,14 @@ class EventBus:
     
     def shutdown(self) -> None:
         """Termina el EventBus de forma limpia"""
-        logger.info("EventBus shutting down...")
+        self.logger.info("EventBus shutting down...")
         
         self._shutdown_event.set()
         
         if self._processing_thread and self._processing_thread.is_alive():
             self._processing_thread.join(timeout=5.0)
             if self._processing_thread.is_alive():
-                logger.warning("EventBus processing thread did not terminate cleanly")
+                self.logger.warning("EventBus processing thread did not terminate cleanly")
         
         # Procesar eventos pendientes si no es asíncrono
         if self._event_queue and not self._async_processing:
@@ -319,7 +321,7 @@ class EventBus:
                 except queue.Empty:
                     break
         
-        logger.info("EventBus shutdown complete")
+        self.logger.info("EventBus shutdown complete")
 
 
 # Decorador para facilitar la suscripción

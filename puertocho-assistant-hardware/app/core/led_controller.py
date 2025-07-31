@@ -5,7 +5,6 @@ Maneja el control de LEDs RGB para indicar estados del asistente
 """
 
 import asyncio
-import logging
 import time
 import threading
 import os
@@ -13,6 +12,7 @@ from enum import Enum
 from typing import Optional, Tuple, List
 from dataclasses import dataclass
 import math
+from utils.logger import HardwareLogger, log_hardware_event
 
 try:
     from utils.apa102 import APA102
@@ -22,10 +22,7 @@ except ImportError:
     APA102 = None
     SPI_AVAILABLE = False
 
-from utils.logger import get_logger
 from config import config
-
-logger = get_logger(__name__)
 
 class LEDState(Enum):
     """Estados del asistente que se reflejan en los LEDs"""
@@ -150,6 +147,9 @@ class LEDController:
             brightness: Brillo global 0-255 (usar config si es None)
             simulate: Si True, simula sin hardware real (usar config si es None)
         """
+        # Initialize HardwareLogger
+        self.logger = HardwareLogger("core.led_controller")
+        
         # Usar configuración por defecto si no se especifica
         self.num_leds = num_leds if num_leds is not None else config.led.count
         self.brightness = brightness if brightness is not None else config.led.brightness
@@ -157,7 +157,7 @@ class LEDController:
         
         # Si simulate es False, verificar si hay hardware disponible
         if not self.simulate and not os.path.exists('/dev/spidev0.0'):
-            logger.warning("SPI device not found, switching to simulation mode")
+            self.logger.warning("SPI device not found, switching to simulation mode")
             self.simulate = True
         
         self.current_state = LEDState.OFF
@@ -170,14 +170,14 @@ class LEDController:
         if not self.simulate and SPI_AVAILABLE:
             try:
                 self.driver = APA102(num_led=self.num_leds)
-                logger.info(f"Initialized APA102 driver with {self.num_leds} LEDs")
+                self.logger.info(f"Initialized APA102 driver with {self.num_leds} LEDs")
             except Exception as e:
-                logger.error(f"Failed to initialize APA102 driver: {e}")
+                self.logger.error(f"Failed to initialize APA102 driver: {e}")
                 self.simulate = True
                 self.driver = None
         else:
             self.driver = None
-            logger.info("Running in LED simulation mode")
+            self.logger.info("Running in LED simulation mode")
     
     def _apply_brightness(self, color: LEDColor) -> LEDColor:
         """Aplicar brillo global a un color"""
@@ -193,7 +193,7 @@ class LEDController:
         """Establecer color de un LED específico"""
         if self.simulate:
             # Simular - solo logging
-            logger.debug(f"LED {led_index}: RGB({color.red}, {color.green}, {color.blue}) Brightness({color.brightness})")
+            self.logger.debug(f"LED {led_index}: RGB({color.red}, {color.green}, {color.blue}) Brightness({color.brightness})")
             return
         
         if self.driver:
@@ -202,7 +202,7 @@ class LEDController:
                 adjusted_color = self._apply_brightness(color)
                 self.driver.set_pixel(led_index, adjusted_color.red, adjusted_color.green, adjusted_color.blue)
             except Exception as e:
-                logger.error(f"Failed to set LED {led_index}: {e}")
+                self.logger.error(f"Failed to set LED {led_index}: {e}")
     
     def _update_all_leds(self, colors: List[LEDColor]):
         """Actualizar todos los LEDs"""
@@ -214,11 +214,11 @@ class LEDController:
             try:
                 self.driver.show()
             except Exception as e:
-                logger.error(f"Failed to show LEDs: {e}")
+                self.logger.error(f"Failed to show LEDs: {e}")
     
     def _animation_loop(self):
         """Bucle principal de animación"""
-        logger.info("Starting LED animation loop")
+        self.logger.info("Starting LED animation loop")
         
         while not self.stop_event.is_set():
             if self.current_pattern:
@@ -233,7 +233,7 @@ class LEDController:
             
             time.sleep(config.led.animation_speed)  # Usar velocidad de animación de config
         
-        logger.info("LED animation loop stopped")
+        self.logger.info("LED animation loop stopped")
     
     def start_animation(self):
         """Iniciar hilo de animación"""
@@ -244,7 +244,7 @@ class LEDController:
         self.animation_running = True
         self.animation_thread = threading.Thread(target=self._animation_loop, daemon=True)
         self.animation_thread.start()
-        logger.info("LED animation started")
+        self.logger.info("LED animation started")
     
     def stop_animation(self):
         """Detener hilo de animación"""
@@ -258,13 +258,13 @@ class LEDController:
             self.animation_thread.join(timeout=1.0)
             self.animation_thread = None
         
-        logger.info("LED animation stopped")
+        self.logger.info("LED animation stopped")
     
     def set_pattern(self, pattern: LEDPattern):
         """Establecer patrón de LED"""
         self.current_pattern = pattern
         self.current_pattern.start_time = time.time()
-        logger.info(f"LED pattern set: {type(pattern).__name__}")
+        self.logger.info(f"LED pattern set: {type(pattern).__name__}")
     
     def set_state(self, state: LEDState):
         """Establecer estado del asistente"""
@@ -272,7 +272,7 @@ class LEDController:
             return
         
         self.current_state = state
-        logger.info(f"LED state changed to: {state.value}")
+        self.logger.info(f"LED state changed to: {state.value}")
         
         # Configurar patrón según estado
         if state == LEDState.IDLE:
@@ -294,7 +294,7 @@ class LEDController:
             # Apagado
             pattern = SolidPattern([self.COLORS['off']])
         else:
-            logger.warning(f"Unknown LED state: {state}")
+            self.logger.warning(f"Unknown LED state: {state}")
             pattern = SolidPattern([self.COLORS['off']])
         
         self.set_pattern(pattern)
@@ -303,7 +303,7 @@ class LEDController:
         """Establecer color personalizado sólido"""
         pattern = SolidPattern([color])
         self.set_pattern(pattern)
-        logger.info(f"Custom color set: RGB({color.red}, {color.green}, {color.blue})")
+        self.logger.info(f"Custom color set: RGB({color.red}, {color.green}, {color.blue})")
     
     def set_rainbow_pattern(self, duration: float = 5.0):
         """Establecer patrón arcoíris"""
@@ -325,7 +325,7 @@ class LEDController:
         
         pattern = RainbowPattern(rainbow_colors, duration)
         self.set_pattern(pattern)
-        logger.info("Rainbow pattern set")
+        self.logger.info("Rainbow pattern set")
     
     def set_brightness(self, brightness: int):
         """Establecer brillo global"""
@@ -333,7 +333,7 @@ class LEDController:
             raise ValueError("Brightness must be between 0 and 255")
         
         self.brightness = brightness
-        logger.info(f"LED brightness set to: {brightness}")
+        self.logger.info(f"LED brightness set to: {brightness}")
     
     def turn_off(self):
         """Apagar todos los LEDs"""
@@ -341,7 +341,7 @@ class LEDController:
     
     def test_pattern(self, duration: float = 5.0):
         """Ejecutar patrón de prueba"""
-        logger.info("Starting LED test pattern")
+        self.logger.info("Starting LED test pattern")
         
         # Ciclo de prueba
         states = [
@@ -357,11 +357,11 @@ class LEDController:
             time.sleep(duration / len(states))
         
         self.set_state(LEDState.OFF)
-        logger.info("LED test pattern completed")
+        self.logger.info("LED test pattern completed")
     
     def cleanup(self):
         """Limpiar recursos"""
-        logger.info("Cleaning up LED controller")
+        self.logger.info("Cleaning up LED controller")
         self.stop_animation()
         self.turn_off()
         
@@ -373,7 +373,7 @@ class LEDController:
                 self.driver.show()
                 self.driver.cleanup()
             except Exception as e:
-                logger.error(f"Error during LED cleanup: {e}")
+                self.logger.error(f"Error during LED cleanup: {e}")
     
     def __enter__(self):
         """Context manager entry"""

@@ -6,19 +6,11 @@ Este StateManager implementa el patrón Observer y actúa como coordinador puro
 sin conocimiento específico de implementaciones de componentes.
 """
 
-import logging
 from enum import Enum, auto
 from typing import Optional, Dict, List, Callable, Any
 from dataclasses import dataclass
 import time
-
-# Try to import custom logger, fallback to standard logging
-try:
-    from utils.logger import logger, log_hardware_event
-except (ImportError, PermissionError):
-    logger = logging.getLogger(__name__)
-    def log_hardware_event(event_type, data):
-        logger.debug(f"Hardware event: {event_type} - {data}")
+from utils.logger import HardwareLogger, log_hardware_event
 
 
 class AssistantState(Enum):
@@ -77,6 +69,9 @@ class StateManager:
         }
         self._transition_callbacks: Dict[tuple, List[Callable]] = {}
         
+        # Initialize HardwareLogger
+        self.logger = HardwareLogger("state_manager")
+        
         # Estadísticas
         self._stats = {
             "total_transitions": 0,
@@ -85,7 +80,7 @@ class StateManager:
             "current_state_start": time.time()
         }
         
-        logger.info("StateManager initialized in pure coordinator mode")
+        self.logger.info("StateManager initialized in pure coordinator mode")
     
     def register_component(self, component: ComponentInterface) -> None:
         """
@@ -97,7 +92,7 @@ class StateManager:
         component_name = component.get_component_name()
         self._registered_components[component_name] = component
         
-        logger.info(f"Component registered: {component_name}")
+        self.logger.info(f"Component registered: {component_name}")
         log_hardware_event("component_registered", {
             "component_name": component_name,
             "total_components": len(self._registered_components)
@@ -107,7 +102,7 @@ class StateManager:
         """Desregistra un componente"""
         if component_name in self._registered_components:
             del self._registered_components[component_name]
-            logger.info(f"Component unregistered: {component_name}")
+            self.logger.info(f"Component unregistered: {component_name}")
     
     def register_state_callback(self, state: AssistantState, callback: Callable[[StateChangeEvent], None]) -> None:
         """
@@ -118,7 +113,7 @@ class StateManager:
             callback: Función a ejecutar cuando se entra al estado
         """
         self._state_callbacks[state].append(callback)
-        logger.debug(f"State callback registered for {state.name}")
+        self.logger.debug(f"State callback registered for {state.name}")
     
     def register_transition_callback(self, from_state: AssistantState, to_state: AssistantState, 
                                    callback: Callable[[StateChangeEvent], None]) -> None:
@@ -135,7 +130,7 @@ class StateManager:
             self._transition_callbacks[transition] = []
         
         self._transition_callbacks[transition].append(callback)
-        logger.debug(f"Transition callback registered: {from_state.name} -> {to_state.name}")
+        self.logger.debug(f"Transition callback registered: {from_state.name} -> {to_state.name}")
     
     def set_state(self, new_state: AssistantState, context: Dict[str, Any] = None) -> bool:
         """
@@ -149,12 +144,12 @@ class StateManager:
             True si el cambio fue exitoso, False si fue rechazado
         """
         if self.state == new_state:
-            logger.debug(f"State unchanged: {new_state.name}")
+            self.logger.debug(f"State unchanged: {new_state.name}")
             return True
         
         # Validar transición (puede ser extendido con reglas de validación)
         if not self._is_valid_transition(self.state, new_state):
-            logger.warning(f"Invalid transition: {self.state.name} -> {new_state.name}")
+            self.logger.warning(f"Invalid transition: {self.state.name} -> {new_state.name}")
             return False
         
         # Actualizar estadísticas
@@ -180,7 +175,7 @@ class StateManager:
                 try:
                     callback(event)
                 except Exception as e:
-                    logger.error(f"Error in transition callback: {e}")
+                    self.logger.error(f"Error in transition callback: {e}")
         
         # Cambiar estado
         self._previous_state = self.state
@@ -192,7 +187,7 @@ class StateManager:
             self._state_history.pop(0)
         
         # Log del cambio
-        logger.info(f"State changed: {event.previous_state.name} -> {event.new_state.name}")
+        self.logger.info(f"State changed: {event.previous_state.name} -> {event.new_state.name}")
         log_hardware_event("state_changed", {
             "previous_state": event.previous_state.name,
             "new_state": event.new_state.name,
@@ -208,7 +203,7 @@ class StateManager:
             try:
                 callback(event)
             except Exception as e:
-                logger.error(f"Error in state callback: {e}")
+                self.logger.error(f"Error in state callback: {e}")
         
         return True
     
@@ -227,7 +222,7 @@ class StateManager:
             try:
                 component.on_state_changed(event)
             except Exception as e:
-                logger.error(f"Error notifying component {component_name}: {e}")
+                self.logger.error(f"Error notifying component {component_name}: {e}")
     
     def get_current_state(self) -> AssistantState:
         """Retorna el estado actual"""
@@ -282,7 +277,7 @@ class StateManager:
     def reset(self) -> None:
         """Resetea el StateManager al estado inicial"""
         self.set_state(AssistantState.IDLE, {"reason": "manual_reset"})
-        logger.info("StateManager reset to IDLE state")
+        self.logger.info("StateManager reset to IDLE state")
     
     def is_in_state(self, state: AssistantState) -> bool:
         """Verifica si está en un estado específico"""
@@ -320,7 +315,7 @@ class LEDControllerAdapter(ComponentInterface):
             self.led_controller.set_state(led_state)
             
         except Exception as e:
-            logger.error(f"Error updating LED state: {e}")
+            self.logger.error(f"Error updating LED state: {e}")
     
     def get_component_name(self) -> str:
         return "LEDController"
@@ -340,9 +335,9 @@ class VADHandlerAdapter(ComponentInterface):
         try:
             if event.new_state == AssistantState.LISTENING:
                 self.vad_handler.reset()
-                logger.debug("VAD handler reset for LISTENING state")
+                self.logger.debug("VAD handler reset for LISTENING state")
         except Exception as e:
-            logger.error(f"Error resetting VAD handler: {e}")
+            self.logger.error(f"Error resetting VAD handler: {e}")
     
     def get_component_name(self) -> str:
         return "VADHandler"
