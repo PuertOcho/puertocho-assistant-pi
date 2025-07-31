@@ -1,354 +1,307 @@
-# PuertoCho Assistant Hardware - Hitos del Proyecto
+# 📋 TODO: Mejoras en el módulo Core
 
-## 📋 Resumen del Proyecto
+## 🎯 Objetivo General
+Refactorizar las clases del módulo `core` para que cada una se dedique exclusivamente a su responsabilidad específica, eliminando duplicación de código y reduciendo el acoplamiento entre componentes.
 
-El servicio `puertocho-assistant-hardware` es responsable de manejar todo el hardware de la Raspberry Pi, incluyendo:
-- **Grabación de audio** con el módulo ReSpeaker 2-Mic Pi HAT V1.0
-- **Control de LEDs RGB** APA102 para indicar estados del asistente
-- **Detección de botón** en GPIO17 para activación manual
-- **Módulo NFC** por I2C para lectura/escritura de etiquetas
-- **Wake word detection** con Porcupine
-- **Detección de silencio** para parar grabación automáticamente
-- **Comunicación HTTP/WebSocket** con el backend
+## 📦 Mejoras por Componente
 
-## 🏛️ Arquitectura del Sistema
+### 1. **AudioManager** (`audio_manager.py`)
+#### 🔧 Cambios necesarios:
+- **Implementar reproducción de audio**
+  - Añadir método `play_audio()` para reproducción síncrona
+  - Añadir método `play_audio_async()` para reproducción asíncrona con callback
+  - Implementar control de volumen de reproducción
 
-Para asegurar la mantenibilidad y escalabilidad del proyecto, se ha decidido adoptar una arquitectura basada en una **Máquina de Estados Centralizada (`StateManager`)**.
+- **Añadir monitoreo de niveles**
+  - Implementar `get_recording_level()` para obtener nivel de volumen actual
+  - Útil para feedback visual en LEDs
 
-- **`StateManager`**: Orquesta el flujo de la aplicación. Gestiona los estados (`IDLE`, `LISTENING`, `PROCESSING`, etc.) y coordina las acciones entre los diferentes módulos de hardware.
-- **`AudioManager`**: Provee un flujo de audio constante. No conoce el estado de la aplicación, simplemente emite los datos del micrófono.
-- **Módulos de Hardware (`ButtonHandler`, `WakeWordDetector`, `VADHandler`, `LEDController`)**: Actúan como componentes desacoplados.
-    - Notifican eventos al `StateManager` (ej: "botón presionado", "wake word detectado").
-    - Reciben comandos del `StateManager` (ej: "cambiar patrón de LED").
+- **Gestión de buffers centralizada**
+  - Añadir `buffer_audio()` para acumular audio temporalmente
+  - Añadir `get_buffered_audio()` para recuperar audio acumulado
+  - Añadir `clear_buffer()` para limpiar buffers
 
-Esta arquitectura promueve el bajo acoplamiento y la alta cohesión, facilitando las pruebas y futuras modificaciones. La implementación de los hitos se realizará siguiendo este patrón.
+#### ✅ Resultado esperado:
+- AudioManager será el único responsable de toda E/S de audio
+- Otros componentes no necesitarán manejar streams de audio directamente
+- Facilitará testing al poder mockear un único componente
 
-## 🎯 Hitos del Proyecto
+### 2. **WakeWordDetector** (`wake_word_detector.py`)
+#### 🔧 Cambios necesarios:
+- **Eliminar lógica de resampling interna**
+  - Remover buffers de audio internos (`audio_buffer_left/right`)
+  - Delegar resampling a `AudioResampler` dedicado
+  - Simplificar `process_audio_chunk()` para solo detectar
 
-### Hito 1: Configuración Base del Contenedor
-- [x] **1.1** Configurar `Dockerfile` con imagen base Python 3.9+ para ARM64
-- [x] **1.2** Instalar dependencias del sistema (audio, I2C, GPIO)
-- [x] **1.3** Configurar privilegios y acceso a hardware (privileged: true)
-- [x] **1.4** Configurar variables de entorno en archivo `.env`
-- [x] **1.5** Crear estructura de directorios del proyecto
-- [x] **1.6** Configurar logging y manejo de errores básico
+- **Mejorar manejo de eventos**
+  - Usar callbacks más específicos para diferentes tipos de detección
+  - Añadir métricas de confianza en la detección
 
-### Hito 2: Configuración de Audio y ReSpeaker
-- [x] **2.1** Configurar driver del ReSpeaker 2-Mic Pi HAT V1.0
-- [x] **2.2** Implementar detección automática de dispositivos de audio
-- [x] **2.2.1** Ejecutar script para verificar la detección de audio
-- [x] **2.3** Crear clase `AudioManager` para grabación/reproducción
-- [x] **2.4** Implementar configuración de audio (sample rate, channels, formato)
-- [x] **2.5** Añadir pruebas de audio para verificar funcionamiento
-  - [x] **2.5.1** Tests unitarios completos (`test_audio.py`)
-  - [x] **2.5.2** Script interactivo (`test_audio_manager.py`)
-  - [x] **2.5.3** Guardado de audio en archivos WAV
-  - [x] **2.5.4** Reproducción de audio guardado
+#### ✅ Resultado esperado:
+- Clase enfocada únicamente en detección de wake words
+- Código más simple y mantenible
+- Resampling reutilizable por otros componentes
 
-### Hito 3: Control de LEDs RGB (APA102)
-- [x] **3.1** Implementar clase `LEDController` para manejar LEDs APA102
-- [x] **3.2** Configurar comunicación SPI para LEDs RGB
-- [x] **3.3** Crear patrones de LED para diferentes estados:
-  - Disponible (azul pulsante)
-  - Escuchando (verde sólido)
-  - Procesando (amarillo giratorio)
-  - Error (rojo parpadeante)
-- [x] **3.4** Implementar transiciones suaves entre estados
-- [x] **3.5** Añadir control de brillo adaptativo
-- [x] **3.6** Crear scripts de prueba para cada patrón
+### 3. **VADHandler** (`vad_handler.py`)
+#### 🔧 Cambios necesarios:
+- **Eliminar captura de audio**
+  - Remover `_audio_buffer` interno
+  - Eliminar métodos `save_captured_audio()` y `on_audio_captured()`
+  - Solo detectar inicio/fin de voz, no capturar
 
-### Hito 4: Detección de Botón y GPIO
-- [x] **4.1** Implementar clase `ButtonHandler` para GPIO17
-- [x] **4.2** Configurar interrupciones para detección de pulsaciones
-- [x] **4.3** Implementar debouncing para evitar falsas activaciones
-- [x] **4.4** Manejar pulsación corta y larga
-- [x] **4.5** Notificar al StateManager los eventos de botón (corta/larga) a través de un callback
-- [x] **4.6** Integrar con el `StateManager` para iniciar/detener la escucha manualmente
-- [x] **4.7** Implementar modo simulación para testing sin hardware
-- [x] **4.8** Crear script de pruebas completo (`test_button_handler.py`)
-- [x] **4.9** Configurar permisos GPIO en contenedor Docker
-- [x] **4.10** Validar funcionamiento en hardware real
+- **Mejorar callbacks de eventos**
+  - Callbacks deben incluir timestamps precisos
+  - Añadir callback para niveles de confianza VAD
+  - Incluir duración de segmentos de voz
 
-### Hito 5: Wake Word Detection (Porcupine)
-- [x] **5.1** Configurar Porcupine con modelo personalizado "Puerto-ocho"
-- [x] **5.2** Implementar clase `WakeWordDetector` que procesa chunks de audio
-- [x] **5.2.1** Implementar buffer circular para audio en tiempo real
-- [x] **5.3** Optimizar sensibilidad para entorno doméstico
-- [x] **5.4** Implementar filtros de audio para mejorar detección
-- [x] **5.5** Añadir logging de eventos de wake word
-- [x] **5.6** Crear modo de calibración para ajustar sensibilidad
-- [x] **5.7** Integrar con `StateManager`: recibirá audio en estado `IDLE` y notificará detecciones
+#### ✅ Resultado esperado:
+- VAD solo detecta actividad de voz, no maneja audio
+- Reduce memoria al no duplicar buffers de audio
+- Más flexible al no imponer formato de captura
 
-### Hito 6: Detección de Silencio (VAD)
-- [x] **6.1** Implementar Voice Activity Detection con WebRTC VAD
-- [x] **6.2** Configurar umbrales de silencio dinámicos
-- [x] **6.3** Notificar al `StateManager` el inicio y fin del habla para controlar la grabación
-- [x] **6.4** Añadir resampling de audio (44.1kHz -> 16kHz) para compatibilidad con VAD
-- [x] **6.5** Implementar captura de audio durante el habla con pre-buffer
-- [x] **6.6** Crear sistema de guardado temporal del audio capturado
-- [x] **6.7** Integrar con `StateManager`: recibirá audio en estado `LISTENING`
-- [ ] **6.8** Optimizar para diferentes niveles de ruido ambiental
-- [ ] **6.9** Crear sistema de calibración automática de sensibilidad
+### 4. **StateManager** (`state_manager.py`)
+#### 🔧 Cambios necesarios:
+- **Eliminar comunicación WebSocket directa**
+  - Remover referencia a `websocket_client`
+  - Usar callbacks/eventos para notificar cambios de estado
+  - Main.py manejará la comunicación externa
 
-### Hito 7: Módulo NFC (I2C)
-- [ ] **7.1** Configurar comunicación I2C para módulo NFC
-- [ ] **7.2** Implementar clase `NFCManager` para operaciones básicas
-- [ ] **7.3** Funcionalidades de lectura:
-  - Detectar presencia de etiqueta
-  - Leer UID de etiqueta
-  - Leer datos NDEF
-- [ ] **7.4** Funcionalidades de escritura:
-  - Escribir datos NDEF
-  - Formatear etiquetas
-  - Proteger etiquetas
-- [ ] **7.5** Implementar sistema de acciones programables
-- [ ] **7.6** Crear interfaz para configurar acciones NFC
+- **Simplificar manejo de audio**
+  - No procesar audio directamente, solo coordinar
+  - Delegar captura a AudioManager
+  - Usar callbacks para notificar cuando audio está listo
 
-### Hito 8: Sistema de Estados del Asistente (StateManager)
-- [x] **8.1** Implementar la clase `StateManager` en `app/core/state_manager.py`.
-- [x] **8.2** Definir los estados principales como un Enum: `IDLE`, `LISTENING`, `PROCESSING`, `SPEAKING`, `ERROR`.
-- [x] **8.3** Implementar el método `handle_audio_chunk` que distribuirá el audio al componente correspondiente según el estado actual.
-- [x] **8.4** Crear la lógica de transiciones entre estados (ej: `IDLE` -> `LISTENING` al detectar wake word).
-- [x] **8.5** Integrar `LEDController` para que los patrones de LED se sincronicen automáticamente con los cambios de estado.
-- [x] **8.6** Implementar sistema de callbacks para que VADHandler notifique al `StateManager`.
-- [x] **8.7** Añadir logging detallado para cada transición de estado y evento recibido.
-- [x] **8.8** Implementar captura y almacenamiento temporal de audio durante LISTENING.
-- [ ] **8.9** Manejar timeouts y recuperación de errores (ej: volver a `IDLE` si algo falla).
-- [ ] **8.10** Implementar límite de tiempo máximo en estado LISTENING.
+- **Mejorar coordinación de componentes**
+  - Añadir método `register_component()` para registrar componentes
+  - Implementar patrón Observer para notificaciones
+  - Centralizar lógica de transiciones de estado
 
-### Hito 9: API HTTP y Endpoints (FASE 1 - PROJECT_TRACKER) ✅ COMPLETADO
-- [x] **9.1** Configurar FastAPI en `app/api/http_server.py` (HW-API-01) ✅
-  - Implementar estructura base del servidor
-  - Integrar con el StateManager existente
-- [x] **9.2** Implementar endpoints básicos (HW-API-02) ✅
-  - `GET /health` - Estado del servicio hardware ✅
-  - `GET /state` - Obtener estado actual del StateManager ✅
-  - `POST /state` - Cambiar estado manualmente (para testing) ✅
-- [x] **9.3** Implementar endpoints de gestión de audio (HW-API-03) ✅
-  - `GET /audio/capture` - Obtener último archivo de audio capturado ✅
-  - `GET /audio/status` - Estado de audio, VAD y grabación ✅
-  - `GET /audio/download/{filename}` - Descargar archivos de audio específicos ✅
-- [x] **9.4** Implementar endpoints de control de hardware (HW-API-04) ✅
-  - `POST /led/pattern` - Cambiar patrón LED manualmente ✅
-  - `GET /metrics` - Métricas del sistema (CPU, memoria, eventos) ✅
-  - `POST /button/simulate` - Simular eventos de botón para testing ✅
-- [x] **9.5** Configurar documentación y testing (HW-API-05) ✅
-  - Añadir documentación OpenAPI/Swagger ✅
-  - Implementar middleware de logging con request IDs ✅
-  - Crear tests completos de endpoints (13/13 tests passing) ✅
-  - Configurar CORS para desarrollo ✅
-  - Manejo robusto de errores HTTP ✅
-- [x] **9.6** Limpieza de código para comunicación consistente ✅
-  - Eliminado endpoint `/audio/send` innecesario ✅
-  - Actualizado puerto backend a 8000 en configuración ✅
-  - Simplificados tipos de mensajes WebSocket ✅
-  - Configuración de variables de entorno consistentes ✅
+#### ✅ Resultado esperado:
+- StateManager actúa como coordinador puro
+- No conoce detalles de implementación de otros componentes
+- Facilita añadir nuevos estados y transiciones
 
-**Estado**: ✅ **COMPLETADO** - HTTP Server limpio con 13 endpoints funcionales
+### 5. **ButtonHandler** (`button_handler.py`)
+#### 🔧 Cambios necesarios:
+- **Añadir consulta de estado**
+  - Implementar `is_pressed()` para obtener estado actual
+  - Útil para lógica condicional en otros componentes
 
-### Hito 10: Comunicación WebSocket (FASE 4 - PROJECT_TRACKER) 
-**Nota**: Reagendado después de completar Backend Local para aprovechar nueva implementación
+- **Mejorar sistema de callbacks**
+  - Añadir `register_state_callback()` para cambios de estado
+  - Soportar múltiples listeners con prioridades
+  - Añadir callbacks para eventos específicos (doble click, etc.)
 
-- [ ] **10.1** Implementar cliente WebSocket (HW-WS-01)
-  - Conexión al backend local actualizado (puerto 8000)
-  - Sistema de reconexión automática con backoff exponencial
-  - Manejo de errores y timeouts siguiendo patrón del HTTP server
-- [ ] **10.2** Implementar emisión de eventos desde hardware (HW-WS-02)
-  - Audio capturado (envío automático cuando VAD termina)
-  - Cambios de estado del StateManager
-  - Eventos de botón (corto/largo)
-  - Métricas de hardware en tiempo real
-- [ ] **10.3** Implementar recepción de comandos desde backend (HW-WS-03)
-  - Cambios de configuración remotos
-  - Control de patrones LED
-  - Activación manual del sistema
-  - Comandos de calibración
-- [ ] **10.4** Integrar WebSocket con StateManager (HW-WS-04)
-  - Notificaciones automáticas de cambios de estado
-  - Queue de mensajes para conexiones intermitentes
-  - Heartbeat y keep-alive
+#### ✅ Resultado esperado:
+- API más completa para interacción con botón
+- Facilita implementar gestos complejos
+- Mejor integración con StateManager
 
-**Estado**: ⏸️ **POSPUESTO** hasta completar Hito 11 (Backend Local reimplementado)
+### 6. **LEDController** (`led_controller.py`)
+#### 🔧 Cambios necesarios:
+- **Añadir feedback de audio**
+  - Implementar `pulse_with_audio_level()` para visualizar niveles
+  - Sincronizar animaciones con eventos de audio
 
-### Hito 11: Integración con Backend Local (Actualizado según Backend reimplementado)
-- [ ] **11.1** Esperar Backend Local Gateway (referencia PROJECT_TRACKER FASE 2)
-  - Backend local debe implementar endpoints para recibir datos del hardware
-  - Backend debe actuar como cliente HTTP del hardware (puerto 8080)
-  - Configurar variables de entorno para comunicación bidireccional
-- [ ] **11.2** Adaptar envío automático de audio si es necesario
-  - Verificar que endpoint `/audio/send` funciona con nuevo backend
-  - Configurar headers y formato esperado por nuevo backend
-  - Manejo de errores y reintentos ya implementado
-- [ ] **11.3** Probar sincronización de estados
-  - Verificar que backend local obtiene estados via `GET /state`
-  - Validar que cambios remotos llegan via `POST /state`
-  - Manejo de conflictos de estado entre hardware y backend
-- [ ] **11.4** Configurar sistema de configuración remota
-  - Recepción de configuraciones desde nuevo backend local
-  - Validación de configuraciones recibidas
-  - Aplicación en tiempo real sin reinicio
+- **Mejorar sistema de animaciones**
+  - Hacer animaciones interrumpibles
+  - Añadir transiciones suaves entre estados
+  - Implementar cola de animaciones
 
-**Estado**: ⏸️ **BLOQUEADO** - Esperando reimplementación Backend Local (PROJECT_TRACKER Fase 2)
+- **Optimizar rendimiento**
+  - Reducir uso de CPU en animaciones
+  - Implementar cache de patrones comunes
 
-### Hito 12: Configuración y Persistencia
-- [ ] **12.1** Crear archivo de configuración YAML/JSON
-- [ ] **12.2** Implementar sistema de configuración por capas:
-  - Configuración por defecto
-  - Configuración de usuario
-  - Variables de entorno
-- [ ] **12.3** Persistir configuraciones de calibración
-- [ ] **12.4** Implementar backup y restauración de configuración
-- [ ] **12.5** Crear interfaz de configuración web
-- [ ] **12.6** Añadir validación de configuración
+#### ✅ Resultado esperado:
+- Feedback visual más rico y responsivo
+- Menor consumo de recursos
+- Animaciones más fluidas
 
-### Hito 13: Monitoreo y Logging
-- [ ] **13.1** Implementar logging estructurado (JSON)
-- [ ] **13.2** Configurar rotación de logs
-- [ ] **13.3** Añadir métricas de rendimiento:
-  - Latencia de audio
-  - Uso de CPU/RAM
-  - Eventos por segundo
-- [ ] **13.4** Implementar health checks avanzados
-- [ ] **13.5** Crear dashboard de monitoreo
-- [ ] **13.6** Añadir alertas por email/webhook
+## 🔄 Mejoras Adicionales Identificadas - ACTUALIZADAS
 
-### Hito 14: Testing y Calidad
-- [ ] **14.1** Crear tests unitarios para cada componente
-- [ ] **14.2** Implementar tests de integración
-- [ ] **14.3** Añadir tests de hardware simulado
-- [ ] **14.4** Crear suite de tests de rendimiento
-- [ ] **14.5** Implementar tests de stress
-- [ ] **14.6** Configurar CI/CD para tests automáticos
+### 13. **Optimizar integración entre componentes existentes**
+#### 🔧 Cambios de integración necesarios:
+- **AudioManager + CircularAudioBuffer**
+  - Reemplazar buffers internos con `CircularAudioBuffer` y `DualChannelBuffer`
+  - Usar estadísticas del buffer para métricas de rendimiento
+  - Implementar triggers automáticos basados en nivel de llenado
 
-### Hito 15: Optimización y Producción
-- [ ] **15.1** Optimizar uso de memoria y CPU
-- [ ] **15.2** Implementar cache para operaciones frecuentes
-- [ ] **15.3** Añadir compresión y optimización de datos
-- [ ] **15.4** Configurar monitoreo de producción
-- [ ] **15.5** Implementar actualizaciones OTA
-- [ ] **15.6** Crear documentación de deployment
+- **WakeWordDetector + AudioResampler**
+  - Eliminar lógica de resampling interna y delegar a `utils/audio_resampling.py`
+  - Usar `prepare_for_porcupine()` para preparación específica
+  - Implementar cache de audio procesado para evitar reprocesamiento
 
-## 🔧 Tecnologías y Librerías Principales
+- **LEDController + APA102**
+  - Migrar a usar `APA102` como driver base
+  - Aprovechar optimizaciones SPI existentes
+  - Implementar patrones avanzados sobre la base existente
 
-### Audio
-- **sounddevice**: Grabación y reproducción de audio
-- **webrtcvad**: Voice Activity Detection
-- **numpy**: Procesamiento de señales de audio
+- **Todos los componentes + HardwareLogger**
+  - Migrar todos los `logging.getLogger()` a `HardwareLogger`
+  - Usar funciones especializadas por evento
+  - Implementar contexto de estado en logs para mejor debugging
 
-### Wake Word
-- **pvporcupine**: Detección de wake word
-- **Modelo personalizado**: Puerto-ocho_es_raspberry-pi_v3_0_0.ppn
+#### ✅ Beneficios:
+- Reduce duplicación de código significativamente
+- Aprovecha optimizaciones ARM64 existentes
+- Mejora consistencia en logging y métricas
+- Facilita mantenimiento al centralizar funcionalidades
 
-### Hardware
-- **RPi.GPIO**: Control de GPIO y botones
-- **spidev**: Comunicación SPI para LEDs APA102
-- **I2C**: Comunicación con módulo NFC
+### 8. **Aprovechar CircularAudioBuffer existente** (`utils/audio_buffer.py`) ✅ IMPLEMENTADO
+#### 🔧 Integración necesaria:
+- **Integrar en AudioManager**
+  - Usar `CircularAudioBuffer` como buffer principal en AudioManager
+  - Implementar `DualChannelBuffer` para manejo estéreo nativo
+  - Aprovechar funciones de estadísticas para monitoreo
 
-### Comunicación
-- **fastapi**: API HTTP
-- **uvicorn**: Servidor ASGI
-- **websockets**: Cliente WebSocket
-- **requests**: Cliente HTTP
+- **Mejorar funcionalidad existente**
+  - Añadir triggers automáticos cuando buffer alcanza nivel específico
+  - Implementar buffer overflow protection
+  - Añadir métricas de latencia y rendimiento
 
-### Utilidades
-- **python-dotenv**: Gestión de variables de entorno
-- **asyncio**: Programación asíncrona
-- **threading**: Manejo de hilos para hardware
+#### ✅ Beneficios actuales:
+- ✅ Buffer circular thread-safe completamente implementado
+- ✅ Soporte para dual-channel especializado para wake word
+- ✅ Sistema de estadísticas robusto
+- ✅ Manejo eficiente de memoria con wrap-around
 
-## 📁 Estructura de Archivos Propuesta
+### 9. **Aprovechar HardwareLogger existente** (`utils/logger.py`) ✅ IMPLEMENTADO
+#### 🔧 Integración necesaria:
+- **Estandarizar en todos los componentes**
+  - Migrar todos los loggers a usar `HardwareLogger`
+  - Usar funciones especializadas (`log_audio_event`, `log_wake_word_event`, etc.)
+  - Implementar contexto de estado en logs
 
-```
-puertocho-assistant-hardware/
-├── Dockerfile
-├── requirements.txt
-├── .env.example
-├── app/
-│   ├── main.py                 # Punto de entrada principal
-│   ├── config.py               # Configuración centralizada
-│   ├── core/
-│   │   ├── __init__.py
-│   │   ├── audio_manager.py    # Gestión de audio
-│   │   ├── led_controller.py   # Control de LEDs
-│   │   ├── button_handler.py   # Manejo de botones
-│   │   ├── nfc_manager.py      # Gestión NFC
-│   │   ├── state_machine.py    # Máquina de estados
-│   │   └── wake_word_detector.py # Detección wake word
-│   ├── api/
-│   │   ├── __init__.py
-│   │   ├── http_server.py      # Servidor HTTP
-│   │   └── websocket_client.py # Cliente WebSocket
-│   ├── utils/
-│   │   ├── __init__.py
-│   │   ├── logger.py           # Logging
-│   │   ├── metrics.py          # Métricas
-│   │   └── calibration.py      # Calibración
-│   └── tests/
-│       ├── __init__.py
-│       ├── test_audio.py
-│       ├── test_led.py
-│       ├── test_nfc.py
-│       └── test_integration.py
-├── scripts/
-│   ├── setup.sh               # Script de instalación
-│   ├── test_hardware.py       # Pruebas de hardware
-│   └── calibrate.py           # Calibración automática
-├── docs/
-│   ├── README.md
-│   ├── API.md
-│   └── DEPLOYMENT.md
-└── models/
-    ├── porcupine_params_es.pv
-    └── Puerto-ocho_es_raspberry-pi_v3_0_0.ppn
+- **Añadir métricas de rendimiento**
+  - Expandir `log_performance_metric()` para cubrir todos los componentes
+  - Implementar dashboard de logs en tiempo real
+  - Añadir alertas automáticas por umbral de métricas
+
+#### ✅ Beneficios actuales:
+- ✅ Logging estructurado en JSON
+- ✅ Funciones especializadas por componente
+- ✅ Rotación automática de archivos
+- ✅ Métricas de rendimiento integradas
+
+### 10. **Optimizar APA102 LED Driver** (`utils/apa102.py`) ✅ IMPLEMENTADO
+#### 🔧 Mejoras necesarias:
+- **Integrar con LEDController**
+  - Usar `APA102` como driver base en `LEDController`
+  - Implementar patrones de animación sobre la clase existente
+  - Añadir efectos sincronizados con audio usando buffer circular
+
+- **Optimizar rendimiento**
+  - Cache de patrones de colores frecuentes
+  - Batching de operaciones SPI para mejor rendimiento
+  - Implementar interpolación suave entre estados
+
+#### ✅ Beneficios actuales:
+- ✅ Driver SPI optimizado para APA102
+- ✅ Soporte para múltiples formatos de color
+- ✅ Base sólida para efectos complejos
+
+### 11. **Implementar EventBus** (`utils/event_bus.py`)
+#### 🔧 Implementación necesaria:
+```python
+class EventBus:
+    """Sistema centralizado de eventos"""
+    def publish(self, event_type, data):
+        # Publicar evento a suscriptores
+        pass
+    
+    def subscribe(self, event_type, callback):
+        # Suscribir callback a tipo de evento
+        pass
 ```
 
-## 🚀 Próximos Pasos
+#### ✅ Beneficios:
+- Desacopla componentes completamente
+- Facilita debugging al centralizar eventos
+- Permite añadir nuevos componentes sin modificar existentes
+- Se integra con HardwareLogger existente
 
-1. **✅ Hito 1**: Configuración base del contenedor - **COMPLETADO**
-2. **✅ Hito 2**: Configuración de Audio y ReSpeaker - **COMPLETADO**
-3. **✅ Hito 3**: Control de LEDs RGB (APA102) - **COMPLETADO**
-4. **✅ Hito 4**: Detección de Botón y GPIO - **COMPLETADO**
-5. **🔄 Próximo**: Implementar Hito 5 (Wake Word Detection)
-6. **Planificado**: Desarrollar Hitos 6-8 (VAD, NFC, StateManager)
-7. **Futuro**: Integrar Hitos 9-11 (API, WebSocket, Backend)
-8. **Final**: Finalizar Hitos 12-15 (Configuración, Testing, Producción)
+### 12. **Crear AudioProcessor unificado** (`utils/audio_processor.py`)
+#### 🔧 Nueva implementación necesaria:
+- **Combinar funcionalidades existentes**
+  - Integrar `AudioResampler`, `CircularAudioBuffer` y funciones de `audio_resampling.py`
+  - Crear API unificada para todo el procesamiento de audio
+  - Implementar pipelines configurables (resample -> buffer -> detect)
 
-## 📝 Notas Importantes
+- **Añadir nuevas capacidades**
+  - Filtrado de audio (noise reduction, EQ)
+  - Análisis de espectro en tiempo real
+  - Detección de niveles de ruido ambiente
 
-- ✅ El contenedor debe ejecutarse con `privileged: true` para acceso al hardware
-- ✅ Usar `network_mode: host` para comunicación eficiente  
-- ✅ Configurar correctamente I2C, SPI y GPIO en el sistema host
-- ✅ Permisos GPIO resueltos ejecutando contenedor como root (user: "0:0")
-- ✅ ButtonHandler implementado con soporte completo para hardware real y simulación
-- 🔄 Considerar latencia y rendimiento en tiempo real para próximos módulos
-- 🔄 Implementar manejo robusto de errores de hardware
-- 🔄 Documentar todas las configuraciones y calibraciones
+#### ✅ Beneficios esperados:
+- API única para todo el procesamiento de audio
+- Aprovecha código optimizado existente
+- Facilita añadir nuevos algoritmos de procesamiento
 
-### 🎯 Estado Actual del Proyecto
-**Hardware Base**: ✅ COMPLETADO (Hitos 1-9)
-- Contenedor Docker configurado y funcionando
-- Audio ReSpeaker operativo con grabación/reproducción
-- LEDs RGB APA102 con patrones dinámicos
-- Detección de botón GPIO con eventos y callbacks
-- Wake Word Detection con Porcupine funcionando
-- VAD implementado con captura de audio y resampling
-- StateManager con flujo completo de estados
-- **HTTP Server limpio con 13 endpoints funcionales**
-- **API completamente documentada con OpenAPI/Swagger**
-- **Tests completos (13/13 passing)**
-- **Comunicación con backend consistente (puerto 8000)**
+## 🔄 Mejoras Adicionales Identificadas - ACTUALIZADAS
+#### 🔧 Cambios necesarios:
+- Estandarizar formato de logs entre componentes
+- Añadir contexto a cada log (estado actual, componente origen)
+- Implementar métricas de rendimiento por componente
+- Crear dashboard de salud del sistema
 
-**Próximos Pasos Prioritarios**: 
-1. 🔄 **Esperar reimplementación Backend Local** (PROJECT_TRACKER Fase 2)
-2. 🔌 **Implementar WebSocket Cliente** una vez el backend esté listo (Hito 10)
-3. 🤝 **Integración bidireccional** con nuevo backend (Hito 11)
+#### ✅ Beneficios:
+- Debugging más eficiente
+- Identificación rápida de cuellos de botella
+- Mejor monitoreo en producción
 
-**Decisión Arquitectónica**: Hardware mantiene el control principal, Backend actúa como cliente/gateway
-- CORS configurado para desarrollo
-- Manejo robusto de errores HTTP
-- Configuración de variables de entorno consistente entre servicios
+## 📅 Orden de Implementación Sugerido - ACTUALIZADO
 
-**Próximo Objetivo**: 🚀 WebSocket (Hito 10) → Integración Backend (Hito 11)
-- Implementar endpoints HTTP para comunicación local
-- Establecer comunicación WebSocket en tiempo real
-- Integrar con backend local para procesamiento remoto
-- Seguir roadmap del PROJECT_TRACKER para sincronización entre servicios
+1. **Fase 1 - Integración de Utils existentes** (Prioridad Alta)
+   - [x] Crear clase wrapper `AudioResampler` sobre funciones existentes ✅ COMPLETADO
+   - [ ] Integrar `CircularAudioBuffer` en AudioManager
+   - [ ] Migrar todos los componentes a usar `HardwareLogger`
+   - [ ] Integrar `APA102` como driver base en LEDController
+
+2. **Fase 2 - Refactorización Core** (Prioridad Alta)
+   - [x] Refactorizar WakeWordDetector para usar AudioResampler ✅ COMPLETADO
+   - [x] Simplificar VADHandler (eliminar captura, usar buffer centralizado) ✅ COMPLETADO
+   - [ ] Refactorizar StateManager (eliminar WebSocket directo)
+   - [ ] Implementar EventBus básico
+
+3. **Fase 3 - Nuevas funcionalidades** (Prioridad Media)
+   - [ ] Crear AudioProcessor unificado
+   - [ ] Mejorar ButtonHandler con nuevos callbacks
+   - [ ] Implementar feedback de audio en LEDs
+   - [ ] Añadir transiciones suaves y animaciones interrumpibles
+
+4. **Fase 4 - Optimización y Métricas** (Prioridad Baja)
+   - [ ] Optimizar rendimiento usando cache en resampling
+   - [ ] Implementar dashboard de métricas en tiempo real
+   - [ ] Añadir alertas automáticas por umbral
+   - [ ] Performance tuning específico para Raspberry Pi
+
+## 🧪 Testing Requerido
+
+Para cada componente refactorizado:
+- [ ] Unit tests para nuevos métodos
+- [ ] Integration tests entre componentes
+- [ ] Performance tests para operaciones críticas
+- [ ] Tests de regresión para funcionalidad existente
+
+## 📝 Notas Importantes - ACTUALIZADAS
+
+- **Aprovechar código existente**: La carpeta `utils/` contiene implementaciones robustas que deben ser el fundamento de la refactorización
+- **Mantener retrocompatibilidad**: Los cambios deben ser incrementales, especialmente al migrar a componentes existentes
+- **Documentar cambios**: Actualizar docstrings y README, especialmente para nuevas integraciones
+- **Optimizaciones ARM64**: El código en `utils/` ya está optimizado para Raspberry Pi, mantener estas optimizaciones
+- **Coordinar con main.py**: Actualizar la inicialización para usar los nuevos componentes integrados
+- **Testing exhaustivo**: Probar especialmente las integraciones entre componentes existentes y nuevos
+
+## 💡 Observaciones sobre Utils existentes
+
+### ✅ Fortalezas identificadas:
+- **`audio_resampling.py`**: Implementación completa y optimizada para ARM64, con funciones especializadas
+- **`audio_buffer.py`**: Buffer circular thread-safe robusto con soporte dual-channel
+- **`logger.py`**: Sistema de logging estructurado con métricas especializadas por componente
+- **`apa102.py`**: Driver LED optimizado con soporte SPI eficiente
+
+### 🔄 Oportunidades de mejora:
+- **Encapsulación**: Algunas funciones podrían beneficiarse de clases wrapper
+- **Integración**: Los componentes core aún no aprovechan completamente estas utilidades
+- **Cache**: Oportunidades de optimización mediante caching en operaciones frecuentes
+- **Documentación**: Algunos componentes necesitan mejor documentación de integración
