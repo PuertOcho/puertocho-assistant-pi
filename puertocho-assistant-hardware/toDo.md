@@ -253,7 +253,7 @@ class EventBus:
 
 1. **Fase 1 - Integración de Utils existentes** (Prioridad Alta)
    - [x] Crear clase wrapper `AudioResampler` sobre funciones existentes ✅ COMPLETADO
-   - [ ] Integrar `CircularAudioBuffer` en AudioManager
+   - [x] Integrar `CircularAudioBuffer` en AudioManager ✅ COMPLETADO
    - [ ] Migrar todos los componentes a usar `HardwareLogger`
    - [ ] Integrar `APA102` como driver base en LEDController
 
