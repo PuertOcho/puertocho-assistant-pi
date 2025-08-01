@@ -75,6 +75,7 @@ services:
       - /etc/modprobe.d:/etc/modprobe.d:ro
       - puertocho-logs:/app/logs
       - puertocho-config:/app/config
+      - ./puertocho-assistant-hardware/app/captured_audio:/app/captured_audio
     devices:
       - /dev/i2c-1:/dev/i2c-1
       - /dev/spidev0.0:/dev/spidev0.0

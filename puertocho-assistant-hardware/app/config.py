@@ -21,6 +21,12 @@ class AudioConfig:
     chunk_size: int = int(os.getenv("AUDIO_CHUNK_SIZE", "1024"))
     format: str = os.getenv("AUDIO_FORMAT", "int16")
     buffer_size: int = int(os.getenv("AUDIO_BUFFER_SIZE", "4096"))
+    
+    # Configuración de captura modular
+    voice_capture_max_duration: float = float(os.getenv("VOICE_CAPTURE_MAX_DURATION", "30.0"))
+    voice_capture_auto_save: bool = os.getenv("VOICE_CAPTURE_AUTO_SAVE", "true").lower() == "true"
+    voice_capture_format: str = os.getenv("VOICE_CAPTURE_FORMAT", "wav")
+    continuous_buffer_duration: float = float(os.getenv("CONTINUOUS_BUFFER_DURATION", "3.0"))
 
 @dataclass
 class WakeWordConfig:
