@@ -249,7 +249,22 @@ class EventBus:
 - Identificación rápida de cuellos de botella
 - Mejor monitoreo en producción
 
-## 📅 Orden de Implementación Sugerido - ACTUALIZADO
+## 📅 Orden de Implementación Sugerido - ACTUALIZADO CON PRIORIDADES CRÍTICAS
+
+0. **Fase 0 - Reparación Crítica** (Prioridad CRÍTICA) 🚨 **INMEDIATO**
+   - [ ] **Corregir bug en health check del backend** (5 minutos)
+     - Inicializar variable `hardware_error` correctamente
+     - Probar endpoint `/health` funciona
+   
+   - [ ] **Implementar endpoint WebSocket en backend** (30 minutos)
+     - Añadir `@app.websocket("/ws")` en main.py
+     - Verificar configuración uvicorn para WebSockets
+     - Probar conexión básica hardware -> backend
+   
+   - [ ] **Implementar captura post-wake word** (1-2 horas)
+     - Buffer persistente para audio post-wake word
+     - Envío via WebSocket al backend
+     - Timeout para fin de mensaje
 
 1. **Fase 1 - Integración de Utils existentes** (Prioridad Alta) ✅ **COMPLETADA**
    - [x] Crear clase wrapper `AudioResampler` sobre funciones existentes ✅ COMPLETADO
@@ -257,23 +272,118 @@ class EventBus:
    - [x] Migrar todos los componentes a usar `HardwareLogger` ✅ COMPLETADO
    - [x] Integrar `APA102` como driver base en LEDController ✅ COMPLETADO
 
-2. **Fase 2 - Refactorización Core** (Prioridad Alta)
+2. **Fase 2 - Refactorización Core** (Prioridad Alta) ✅ **COMPLETADA**
    - [x] Refactorizar WakeWordDetector para usar AudioResampler ✅ COMPLETADO
    - [x] Simplificar VADHandler (eliminar captura, usar buffer centralizado) ✅ COMPLETADO
-   - [ ] Refactorizar StateManager (eliminar WebSocket directo)
-   - [ ] Implementar EventBus básico
+   - [x] Refactorizar StateManager (eliminar WebSocket directo) ✅ COMPLETADO
+   - [x] Implementar EventBus básico ✅ COMPLETADO
 
-3. **Fase 3 - Nuevas funcionalidades** (Prioridad Media)
-   - [ ] Crear AudioProcessor unificado
-   - [ ] Mejorar ButtonHandler con nuevos callbacks
-   - [ ] Implementar feedback de audio en LEDs
-   - [ ] Añadir transiciones suaves y animaciones interrumpibles
+3. **Fase 3 - Nuevas funcionalidades** (Prioridad Media) ✅ **COMPLETADA**
+   - [x] Crear AudioProcessor unificado ✅ COMPLETADO
+   - [x] Mejorar ButtonHandler con nuevos callbacks ✅ COMPLETADO
+   - [x] Implementar feedback de audio en LEDs ✅ COMPLETADO
+   - [x] Añadir transiciones suaves y animaciones interrumpibles ✅ COMPLETADO
 
-4. **Fase 4 - Optimización y Métricas** (Prioridad Baja)
+4. **Fase 4 - Comunicación Backend-Hardware** (Prioridad Alta) 🚨 **CRÍTICO**
+   - [ ] **Corregir conexión WebSocket entre hardware y backend**
+     - Error: `[Errno 111] Connect call failed ('127.0.0.1', 8000)`
+     - Backend responde en puerto 8000 pero WebSocket no está disponible
+     - Verificar endpoint `/ws` en backend gateway
+   
+   - [ ] **Corregir bug en health check del backend**
+     - Error: `cannot access local variable 'hardware_error' where it is not associated with a value`
+     - Línea 136 en `/puertocho-assistant-backend/src/main.py`
+   
+   - [ ] **Implementar endpoint WebSocket en backend**
+     - Verificar que `@app.websocket("/ws")` esté implementado
+     - Asegurar que maneja eventos del hardware correctamente
+   
+   - [ ] **Corregir captura de audio post-wake word**
+     - Audio se pierde después de detectar wake word
+     - Implementar buffer persistente para captura completa
+     - Enviar audio capturado al backend via WebSocket
+
+5. **Fase 5 - Optimización y Métricas** (Prioridad Baja)
    - [ ] Optimizar rendimiento usando cache en resampling
    - [ ] Implementar dashboard de métricas en tiempo real
    - [ ] Añadir alertas automáticas por umbral
    - [ ] Performance tuning específico para Raspberry Pi
+   - [ ] Resolver warnings de audio overflow (`input overflow`)
+
+## 🚨 Problemas Críticos Identificados - NUEVA SECCIÓN
+
+### **PROBLEMA 1: Conexión WebSocket Backend-Hardware FALLIDA**
+#### 🔴 Estado: CRÍTICO - Sistema no funcional
+#### 📊 Evidencia de logs:
+```
+{"timestamp": "2025-08-01T07:25:21.809042Z", "level": "ERROR", "logger": "api.websocket_client", "message": "WebSocket connection failed: Multiple exceptions: [Errno 111] Connect call failed ('::1', 8000, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 8000)", "module": "logger", "function": "_log", "line": 144, "thread": 4155846672, "process": 1}
+```
+
+#### 🔧 Causas identificadas:
+1. **Backend responde en puerto 8000 pero WebSocket endpoint no está disponible**
+   - `curl http://localhost:8000/health` funciona 
+   - `ws://localhost:8000/ws` falla con conexión rechazada
+
+2. **Posible falta de endpoint WebSocket en backend**
+   - Verificar que `@app.websocket("/ws")` esté implementado en `main.py`
+   - Verificar que el endpoint maneje eventos del hardware
+
+#### ✅ Soluciones requeridas:
+- [ ] Implementar endpoint WebSocket `/ws` en backend
+- [ ] Verificar configuración de uvicorn para WebSockets
+- [ ] Probar conexión WebSocket manualmente
+- [ ] Implementar reconexión robusta en hardware
+
+### **PROBLEMA 2: Bug en Health Check del Backend**
+#### 🔴 Estado: CRÍTICO - Impide monitoreo
+#### 📊 Evidencia:
+```json
+{"detail":"Health check failed: cannot access local variable 'hardware_error' where it is not associated with a value"}
+```
+
+#### 🔧 Causa identificada:
+- Variable `hardware_error` no inicializada en todas las rutas del código
+- Línea 136 en `/puertocho-assistant-backend/src/main.py`
+
+#### ✅ Solución requerida:
+- [ ] Inicializar `hardware_error = None` antes del try/catch
+- [ ] Usar variable en respuesta de error solo si está definida
+
+### **PROBLEMA 3: Audio se pierde después de Wake Word**
+#### 🔴 Estado: FUNCIONALIDAD CRÍTICA FALTANTE
+#### 📊 Comportamiento actual:
+- Wake word se detecta correctamente
+- Audio posterior no se captura/envía al backend
+- Buffer se limpia sin guardar el mensaje
+
+#### 🔧 Causas posibles:
+1. **Falta de buffer persistente post-wake word**
+2. **Sin envío de audio capturado via WebSocket**
+3. **StateManager no coordina captura completa**
+
+#### ✅ Soluciones requeridas:
+- [ ] Implementar buffer de audio persistente post-wake word
+- [ ] Enviar audio capturado al backend via WebSocket
+- [ ] Coordinar estados de captura en StateManager
+- [ ] Añadir timeout para fin de captura de voz
+
+### **PROBLEMA 4: Warnings de Audio Overflow**
+#### 🔶 Estado: DEGRADACIÓN DE RENDIMIENTO
+#### 📊 Evidencia (múltiples):
+```
+{"timestamp": "2025-08-01T07:25:20.785181Z", "level": "WARNING", "logger": "audio_manager", "message": "Estado del stream de audio: input overflow"}
+```
+
+#### 🔧 Causas posibles:
+1. **Buffer de audio demasiado pequeño**
+2. **Procesamiento no optimizado para tiempo real**
+3. **Configuración de latencia subóptima**
+
+#### ✅ Soluciones requeridas:
+- [ ] Aumentar tamaño de buffer de audio
+- [ ] Optimizar procesamiento de audio en tiempo real
+- [ ] Ajustar configuración de latencia de PyAudio
+- [ ] Implementar dropping inteligente de frames
 
 ## 🧪 Testing Requerido
 
@@ -283,7 +393,12 @@ Para cada componente refactorizado:
 - [ ] Performance tests para operaciones críticas
 - [ ] Tests de regresión para funcionalidad existente
 
-## 📝 Notas Importantes - ACTUALIZADAS
+## 📝 Notas Importantes - ACTUALIZADAS CON PROBLEMAS CRÍTICOS
+
+- **🚨 PRIORIDAD MÁXIMA**: Solucionar comunicación WebSocket backend-hardware
+- **🔧 Bug crítico**: Health check del backend impide monitoreo del sistema
+- **🎙️ Funcionalidad faltante**: Captura de audio post-wake word es crítica para el funcionamiento
+- **⚡ Optimización audio**: Resolver overflow warnings mejorará estabilidad general
 
 - **Aprovechar código existente**: La carpeta `utils/` contiene implementaciones robustas que deben ser el fundamento de la refactorización
 - **Mantener retrocompatibilidad**: Los cambios deben ser incrementales, especialmente al migrar a componentes existentes
@@ -305,3 +420,31 @@ Para cada componente refactorizado:
 - **Integración**: Los componentes core aún no aprovechan completamente estas utilidades
 - **Cache**: Oportunidades de optimización mediante caching en operaciones frecuentes
 - **Documentación**: Algunos componentes necesitan mejor documentación de integración
+
+## 🎯 Próximos Pasos Inmediatos
+
+### Para solucionar INMEDIATAMENTE:
+
+1. **Corregir health check backend** (5 minutos):
+   ```bash
+   # Editar: /puertocho-assistant-backend/src/main.py línea ~130
+   # Añadir: hardware_error = None antes del try
+   ```
+
+2. **Verificar endpoint WebSocket** (15 minutos):
+   ```bash
+   # Verificar que existe @app.websocket("/ws") en main.py
+   # Si no existe, implementarlo
+   ```
+
+3. **Probar conexión básica** (10 minutos):
+   ```bash
+   # Reiniciar contenedores después de los fixes
+   docker-compose down && docker-compose up -d
+   # Verificar logs sin errores de conexión
+   ```
+
+4. **Implementar captura post-wake word** (1-2 horas):
+   - Modificar StateManager para mantener buffer post-wake word
+   - Enviar audio via WebSocket al backend
+   - Añadir timeout para fin de captura

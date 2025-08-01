@@ -43,11 +43,18 @@ class HardwareLogger:
     """Hardware service logger with structured logging"""
     
     def __init__(self, name: str = "hardware", log_level: str = "INFO", 
-                 log_file: str = "/app/logs/hardware.log", 
+                 log_file: str = None, 
                  log_format: str = "json"):
         self.name = name
         self.log_level = log_level
-        self.log_file = log_file
+        
+        # Usar variable de entorno o path por defecto
+        if log_file is None:
+            log_dir = os.environ.get('LOG_DIR', '/app/logs')
+            self.log_file = os.path.join(log_dir, 'hardware.log')
+        else:
+            self.log_file = log_file
+            
         self.log_format = log_format
         self.logger = None
         

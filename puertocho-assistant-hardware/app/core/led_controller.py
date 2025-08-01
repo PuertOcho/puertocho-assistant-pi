@@ -8,9 +8,10 @@ import asyncio
 import time
 import threading
 import os
+import queue
 from enum import Enum
-from typing import Optional, Tuple, List
-from dataclasses import dataclass
+from typing import Optional, Tuple, List, Callable, Dict, Any
+from dataclasses import dataclass, field
 import math
 from utils.logger import HardwareLogger, log_hardware_event
 
@@ -123,6 +124,95 @@ class BlinkPattern(LEDPattern):
         else:
             return LEDColor(0, 0, 0)
 
+class AudioLevelPattern(LEDPattern):
+    """Patrón que responde a niveles de audio en tiempo real"""
+    def __init__(self, colors: List[LEDColor], duration: float = 0.1):
+        super().__init__(colors, duration)
+        self.audio_level = 0.0  # 0.0 a 1.0
+        self.peak_level = 0.0
+        self.decay_factor = 0.95  # Factor de decaimiento para picos
+    
+    def update_audio_level(self, level: float, peak: float = None):
+        """Actualizar nivel de audio"""
+        self.audio_level = max(0.0, min(1.0, level))
+        if peak is not None:
+            self.peak_level = max(self.peak_level * self.decay_factor, peak)
+    
+    def get_color(self, led_index: int, elapsed_time: float) -> LEDColor:
+        if not self.colors:
+            return LEDColor(0, 0, 0)
+        
+        base_color = self.colors[0]
+        
+        # Calcular número de LEDs que deben estar encendidos basado en el nivel
+        num_leds = 3  # Para ReSpeaker 2-Mic Hat
+        active_leds = int(self.audio_level * num_leds)
+        
+        if led_index < active_leds:
+            # LED activo basado en nivel
+            intensity = 1.0
+        elif led_index == int(self.peak_level * num_leds) and self.peak_level > self.audio_level:
+            # LED de pico
+            intensity = 0.5
+        else:
+            # LED inactivo
+            intensity = 0.0
+        
+        return LEDColor(
+            int(base_color.red * intensity),
+            int(base_color.green * intensity), 
+            int(base_color.blue * intensity),
+            int(base_color.brightness * intensity)
+        )
+
+class SpectrumPattern(LEDPattern):
+    """Patrón que visualiza espectro de frecuencias"""
+    def __init__(self, colors: List[LEDColor], duration: float = 0.1):
+        super().__init__(colors, duration)
+        self.frequency_bins = [0.0, 0.0, 0.0]  # Una por LED
+        self.smoothing_factor = 0.7
+    
+    def update_spectrum(self, frequencies: List[float]):
+        """Actualizar bins de frecuencia"""
+        if len(frequencies) >= 3:
+            for i in range(3):
+                # Smoothing exponencial
+                self.frequency_bins[i] = (
+                    self.smoothing_factor * self.frequency_bins[i] + 
+                    (1 - self.smoothing_factor) * frequencies[i]
+                )
+    
+    def get_color(self, led_index: int, elapsed_time: float) -> LEDColor:
+        if not self.colors or led_index >= len(self.frequency_bins):
+            return LEDColor(0, 0, 0)
+        
+        base_color = self.colors[min(led_index, len(self.colors) - 1)]
+        intensity = min(1.0, max(0.0, self.frequency_bins[led_index]))
+        
+        return LEDColor(
+            int(base_color.red * intensity),
+            int(base_color.green * intensity),
+            int(base_color.blue * intensity),
+            int(base_color.brightness * intensity)
+        )
+
+@dataclass
+class AnimationTransition:
+    """Configuración para transiciones entre animaciones"""
+    from_pattern: Optional[LEDPattern]
+    to_pattern: LEDPattern
+    duration: float = 0.5
+    transition_type: str = "fade"  # "fade", "slide", "instant"
+    start_time: float = field(default_factory=time.time)
+
+@dataclass
+class AnimationCommand:
+    """Comando para la cola de animaciones"""
+    pattern: LEDPattern
+    priority: int = 0
+    interrupting: bool = False
+    transition: Optional[AnimationTransition] = None
+
 class LEDController:
     """Controlador principal para LEDs APA102"""
     
@@ -162,9 +252,20 @@ class LEDController:
         
         self.current_state = LEDState.OFF
         self.current_pattern: Optional[LEDPattern] = None
+        self.current_transition: Optional[AnimationTransition] = None
         self.animation_running = False
         self.animation_thread: Optional[threading.Thread] = None
         self.stop_event = threading.Event()
+        
+        # Cola de animaciones y sistema de prioridades
+        self.animation_queue = queue.PriorityQueue()
+        self.current_priority = 0
+        
+        # Cache de patrones para optimización
+        self.pattern_cache: Dict[str, LEDPattern] = {}
+        
+        # Callbacks para eventos de audio
+        self.audio_callbacks: List[Callable] = []
         
         # Inicializar driver APA102
         if not self.simulate and SPI_AVAILABLE:
@@ -217,21 +318,64 @@ class LEDController:
                 self.logger.error(f"Failed to show LEDs: {e}")
     
     def _animation_loop(self):
-        """Bucle principal de animación"""
+        """Bucle principal de animación con soporte para transiciones y cola"""
         self.logger.info("Starting LED animation loop")
         
         while not self.stop_event.is_set():
-            if self.current_pattern:
-                elapsed_time = time.time() - self.current_pattern.start_time
-                colors = []
+            try:
+                # Procesar cola de animaciones
+                self._process_animation_queue()
                 
-                for i in range(self.num_leds):
-                    color = self.current_pattern.get_color(i, elapsed_time)
-                    colors.append(color)
+                if self.current_pattern:
+                    current_time = time.time()
+                    elapsed_time = current_time - self.current_pattern.start_time
+                    colors = []
+                    
+                    # Verificar si hay transición activa
+                    if self.current_transition:
+                        transition_elapsed = current_time - self.current_transition.start_time
+                        transition_progress = min(1.0, transition_elapsed / self.current_transition.duration)
+                        
+                        if transition_progress >= 1.0:
+                            # Transición completada
+                            self.current_transition = None
+                        else:
+                            # Aplicar transición
+                            for i in range(self.num_leds):
+                                if self.current_transition.from_pattern:
+                                    from_color = self.current_transition.from_pattern.get_color(i, elapsed_time)
+                                else:
+                                    from_color = LEDColor(0, 0, 0)
+                                
+                                to_color = self.current_transition.to_pattern.get_color(i, elapsed_time)
+                                
+                                final_color = self._apply_transition(
+                                    from_color, to_color, transition_progress, 
+                                    self.current_transition.transition_type
+                                )
+                                colors.append(final_color)
+                    
+                    # Si no hay transición o está completada, usar patrón normal
+                    if not self.current_transition:
+                        for i in range(self.num_leds):
+                            color = self.current_pattern.get_color(i, elapsed_time)
+                            colors.append(color)
+                    
+                    self._update_all_leds(colors)
+                    
+                    # Marcar patrón como usado (para cache)
+                    if hasattr(self.current_pattern, 'last_used'):
+                        self.current_pattern.last_used = current_time
                 
-                self._update_all_leds(colors)
-            
-            time.sleep(config.led.animation_speed)  # Usar velocidad de animación de config
+                # Optimización periódica (cada 30 segundos aproximadamente)
+                if int(time.time()) % 30 == 0:
+                    self.optimize_performance()
+                
+                time.sleep(config.led.animation_speed)  # Usar velocidad de animación de config
+                
+            except Exception as e:
+                self.logger.error(f"Error in animation loop: {e}")
+                time.sleep(0.1)  # Breve pausa en caso de error
         
         self.logger.info("LED animation loop stopped")
     
@@ -298,6 +442,23 @@ class LEDController:
             pattern = SolidPattern([self.COLORS['off']])
         
         self.set_pattern(pattern)
+    
+    def _get_pattern_for_state(self, state: LEDState) -> LEDPattern:
+        """Obtener patrón correspondiente a un estado (para uso interno)"""
+        if state == LEDState.IDLE:
+            return PulsePattern([self.COLORS['blue']], duration=3.0, min_brightness=30)
+        elif state == LEDState.LISTENING:
+            return SolidPattern([self.COLORS['green']])
+        elif state == LEDState.PROCESSING:
+            return RotatingPattern([self.COLORS['yellow']], duration=1.5)
+        elif state == LEDState.SPEAKING:
+            return PulsePattern([self.COLORS['white']], duration=1.0, min_brightness=100)
+        elif state == LEDState.ERROR:
+            return BlinkPattern([self.COLORS['red']], duration=0.5, duty_cycle=0.5)
+        elif state == LEDState.OFF:
+            return SolidPattern([self.COLORS['off']])
+        else:
+            return SolidPattern([self.COLORS['off']])
     
     def set_custom_color(self, color: LEDColor):
         """Establecer color personalizado sólido"""
@@ -374,6 +535,232 @@ class LEDController:
                 self.driver.cleanup()
             except Exception as e:
                 self.logger.error(f"Error during LED cleanup: {e}")
+    
+    # ============= NUEVAS FUNCIONALIDADES - FASE 3 =============
+    
+    def pulse_with_audio_level(self, audio_level: float, peak_level: float = None, 
+                              base_color: LEDColor = None):
+        """
+        Pulsar LEDs sincronizado con nivel de audio
+        
+        Args:
+            audio_level: Nivel de audio (0.0 a 1.0)
+            peak_level: Nivel de pico opcional
+            base_color: Color base para la visualización
+        """
+        if base_color is None:
+            base_color = self.COLORS['blue']
+        
+        # Crear o actualizar patrón de audio
+        pattern_key = "audio_level"
+        if pattern_key not in self.pattern_cache:
+            self.pattern_cache[pattern_key] = AudioLevelPattern([base_color])
+        
+        audio_pattern = self.pattern_cache[pattern_key]
+        audio_pattern.update_audio_level(audio_level, peak_level)
+        
+        # Aplicar patrón con prioridad media
+        self._queue_animation(AnimationCommand(
+            pattern=audio_pattern,
+            priority=50,
+            interrupting=True
+        ))
+    
+    def visualize_spectrum(self, frequency_bins: List[float], colors: List[LEDColor] = None):
+        """
+        Visualizar espectro de frecuencias en los LEDs
+        
+        Args:
+            frequency_bins: Lista de niveles por bin de frecuencia
+            colors: Colores para cada bin (opcional)
+        """
+        if colors is None:
+            colors = [self.COLORS['red'], self.COLORS['green'], self.COLORS['blue']]
+        
+        pattern_key = "spectrum"
+        if pattern_key not in self.pattern_cache:
+            self.pattern_cache[pattern_key] = SpectrumPattern(colors)
+        
+        spectrum_pattern = self.pattern_cache[pattern_key]
+        spectrum_pattern.update_spectrum(frequency_bins)
+        
+        self._queue_animation(AnimationCommand(
+            pattern=spectrum_pattern,
+            priority=50,
+            interrupting=True
+        ))
+    
+    def set_pattern_with_transition(self, pattern: LEDPattern, transition_duration: float = 0.5,
+                                   transition_type: str = "fade", priority: int = 0):
+        """
+        Establecer patrón con transición suave
+        
+        Args:
+            pattern: Nuevo patrón a aplicar
+            transition_duration: Duración de la transición en segundos
+            transition_type: Tipo de transición ("fade", "slide", "instant")
+            priority: Prioridad de la animación
+        """
+        transition = AnimationTransition(
+            from_pattern=self.current_pattern,
+            to_pattern=pattern,
+            duration=transition_duration,
+            transition_type=transition_type
+        )
+        
+        command = AnimationCommand(
+            pattern=pattern,
+            priority=priority,
+            interrupting=True,
+            transition=transition
+        )
+        
+        self._queue_animation(command)
+        self.logger.debug(f"Pattern queued with {transition_type} transition ({transition_duration}s)")
+    
+    def queue_animation(self, pattern: LEDPattern, priority: int = 0, interrupting: bool = False):
+        """
+        Añadir animación a la cola
+        
+        Args:
+            pattern: Patrón a animar
+            priority: Prioridad (mayor número = mayor prioridad)
+            interrupting: Si True, interrumpe la animación actual
+        """
+        command = AnimationCommand(
+            pattern=pattern,
+            priority=priority,
+            interrupting=interrupting
+        )
+        self._queue_animation(command)
+    
+    def _queue_animation(self, command: AnimationCommand):
+        """Añadir comando a la cola de animaciones"""
+        if command.interrupting and command.priority >= self.current_priority:
+            # Interrumpir animación actual
+            self.current_pattern = command.pattern
+            self.current_transition = command.transition
+            self.current_priority = command.priority
+        else:
+            # Añadir a cola
+            self.animation_queue.put((-command.priority, time.time(), command))
+    
+    def _process_animation_queue(self):
+        """Procesar cola de animaciones"""
+        try:
+            # Intentar obtener siguiente animación
+            _, _, command = self.animation_queue.get_nowait()
+            
+            if command.priority >= self.current_priority:
+                self.current_pattern = command.pattern
+                self.current_transition = command.transition
+                self.current_priority = command.priority
+                
+        except queue.Empty:
+            pass
+    
+    def _apply_transition(self, from_color: LEDColor, to_color: LEDColor, 
+                         progress: float, transition_type: str) -> LEDColor:
+        """
+        Aplicar transición entre colores
+        
+        Args:
+            from_color: Color inicial
+            to_color: Color final
+            progress: Progreso de transición (0.0 a 1.0)
+            transition_type: Tipo de transición
+            
+        Returns:
+            Color interpolado
+        """
+        if transition_type == "instant" or progress >= 1.0:
+            return to_color
+        
+        if transition_type == "fade":
+            # Interpolación lineal
+            return LEDColor(
+                int(from_color.red + (to_color.red - from_color.red) * progress),
+                int(from_color.green + (to_color.green - from_color.green) * progress),
+                int(from_color.blue + (to_color.blue - from_color.blue) * progress),
+                int(from_color.brightness + (to_color.brightness - from_color.brightness) * progress)
+            )
+        
+        elif transition_type == "slide":
+            # Transición con curva suave (ease-in-out)
+            smooth_progress = 3 * progress**2 - 2 * progress**3
+            return LEDColor(
+                int(from_color.red + (to_color.red - from_color.red) * smooth_progress),
+                int(from_color.green + (to_color.green - from_color.green) * smooth_progress),
+                int(from_color.blue + (to_color.blue - from_color.blue) * smooth_progress),
+                int(from_color.brightness + (to_color.brightness - from_color.brightness) * smooth_progress)
+            )
+        
+        return to_color
+    
+    def register_audio_callback(self, callback: Callable[[float, float], None]):
+        """
+        Registrar callback para eventos de audio
+        
+        Args:
+            callback: Función que recibe (audio_level, peak_level)
+        """
+        self.audio_callbacks.append(callback)
+        self.logger.debug("Audio callback registered")
+    
+    def unregister_audio_callback(self, callback: Callable):
+        """Desregistrar callback de audio"""
+        if callback in self.audio_callbacks:
+            self.audio_callbacks.remove(callback)
+            self.logger.debug("Audio callback unregistered")
+    
+    def _notify_audio_callbacks(self, audio_level: float, peak_level: float):
+        """Notificar callbacks de audio"""
+        for callback in self.audio_callbacks:
+            try:
+                callback(audio_level, peak_level)
+            except Exception as e:
+                self.logger.error(f"Error in audio callback: {e}")
+    
+    def get_animation_status(self) -> Dict[str, Any]:
+        """Obtener estado actual de las animaciones"""
+        return {
+            "current_state": self.current_state.value,
+            "current_pattern": type(self.current_pattern).__name__ if self.current_pattern else None,
+            "current_priority": self.current_priority,
+            "animation_running": self.animation_running,
+            "queue_size": self.animation_queue.qsize(),
+            "has_transition": self.current_transition is not None,
+            "cached_patterns": list(self.pattern_cache.keys()),
+            "audio_callbacks": len(self.audio_callbacks)
+        }
+    
+    def clear_animation_queue(self):
+        """Limpiar cola de animaciones"""
+        while not self.animation_queue.empty():
+            try:
+                self.animation_queue.get_nowait()
+            except queue.Empty:
+                break
+        self.logger.debug("Animation queue cleared")
+    
+    def optimize_performance(self):
+        """Optimizar rendimiento limpiando cache antiguo"""
+        # Limpiar patrones en cache que no se han usado recientemente
+        current_time = time.time()
+        patterns_to_remove = []
+        
+        for key, pattern in self.pattern_cache.items():
+            # Si el patrón no se ha usado en los últimos 30 segundos
+            if hasattr(pattern, 'last_used') and current_time - pattern.last_used > 30:
+                patterns_to_remove.append(key)
+        
+        for key in patterns_to_remove:
+            del self.pattern_cache[key]
+        
+        if patterns_to_remove:
+            self.logger.debug(f"Removed {len(patterns_to_remove)} unused patterns from cache")
+    
+    # ============= FIN NUEVAS FUNCIONALIDADES =============
     
     def __enter__(self):
         """Context manager entry"""
