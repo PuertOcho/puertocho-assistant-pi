@@ -251,15 +251,16 @@ class EventBus:
 
 ## 📅 Orden de Implementación Sugerido - ACTUALIZADO CON PRIORIDADES CRÍTICAS
 
-0. **Fase 0 - Reparación Crítica** (Prioridad CRÍTICA) 🚨 **INMEDIATO**
-   - [ ] **Corregir bug en health check del backend** (5 minutos)
-     - Inicializar variable `hardware_error` correctamente
-     - Probar endpoint `/health` funciona
+0. **Fase 0 - Reparación Crítica** (Prioridad CRÍTICA) ✅ **COMPLETADA** 
+   - [x] **Corregir bug en health check del backend** ✅ RESUELTO
+     - ✅ Inicializar variable `hardware_error` correctamente
+     - ✅ Corregir verificación de estado "healthy" vs "ok"
+     - ✅ Probar endpoint `/health` funciona
    
-   - [ ] **Implementar endpoint WebSocket en backend** (30 minutos)
-     - Añadir `@app.websocket("/ws")` en main.py
-     - Verificar configuración uvicorn para WebSockets
-     - Probar conexión básica hardware -> backend
+   - [x] **Implementar endpoint WebSocket en backend** ✅ RESUELTO
+     - ✅ WebSocket `/ws` ya estaba implementado
+     - ✅ Verificar configuración uvicorn para WebSockets
+     - ✅ Probar conexión básica hardware -> backend
    
    - [ ] **Implementar captura post-wake word** (1-2 horas)
      - Buffer persistente para audio post-wake word

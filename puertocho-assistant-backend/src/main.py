@@ -132,10 +132,11 @@ async def health_check():
     """Health check completo del sistema"""
     try:
         # Verificar estado del hardware
+        hardware_error = None  # Inicializar variable para evitar UnboundLocalError
         try:
             hardware_client = get_hardware_client()
             hardware_health = await hardware_client.get_health()
-            hardware_available = hardware_health.get("status") == "ok"
+            hardware_available = hardware_health.get("status") == "healthy"
         except Exception as e:
             hardware_available = False
             hardware_error = str(e)
@@ -170,7 +171,7 @@ async def health_check():
             }
         }
         
-        if not hardware_available:
+        if not hardware_available and hardware_error:
             health_info["components"]["hardware"]["error"] = hardware_error
         
         return health_info

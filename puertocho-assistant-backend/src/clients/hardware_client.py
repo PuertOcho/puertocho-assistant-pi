@@ -196,7 +196,7 @@ class HardwareClient:
         """Verificar si el hardware está disponible y respondiendo"""
         try:
             health = await self.get_health()
-            return health.get("status") == "ok"
+            return health.get("status") == "healthy"
         except Exception as e:
             self.logger.warning(f"Hardware not available: {e}")
             return False
