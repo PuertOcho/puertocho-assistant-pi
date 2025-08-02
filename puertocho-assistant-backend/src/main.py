@@ -28,7 +28,7 @@ from middleware.logging import LoggingMiddleware, setup_logging
 from core.websocket_manager import websocket_manager
 from core.state_manager import init_state_manager, close_state_manager, get_state_manager
 from clients.hardware_client import init_hardware_client, close_hardware_client, get_hardware_client
-from services.audio_processor import init_audio_processor, close_audio_processor
+from services.audio_processor import init_audio_processor, close_audio_processor, get_audio_processor
 from api.gateway_endpoints import router as gateway_router
 
 
@@ -231,6 +231,8 @@ async def websocket_endpoint(websocket: WebSocket):
                     await handle_hardware_command(data)
                 elif message_type == "get_state":
                     await handle_get_state_request(websocket, connection_id)
+                elif message_type == "audio_captured":
+                    await handle_audio_captured(data)
                 elif message_type == "ping":
                     await websocket.send_json({"type": "pong", "timestamp": data.get("timestamp")})
                 else:
@@ -331,6 +333,23 @@ async def handle_get_state_request(websocket: WebSocket, connection_id: str):
         
     except Exception as e:
         backend_logger.error(f"❌ Failed to send state to {connection_id}: {e}")
+
+
+async def handle_audio_captured(data: dict):
+    """Manejar audio capturado desde hardware"""
+    try:
+        backend_logger.info("🎙️ Audio captured event received from hardware")
+        
+        # Obtener el AudioProcessor
+        audio_processor = get_audio_processor()
+        
+        # Procesar el audio desde hardware
+        result = await audio_processor.process_audio_from_hardware(data)
+        
+        backend_logger.info(f"✅ Audio processing initiated: {result}")
+        
+    except Exception as e:
+        backend_logger.error(f"❌ Failed to handle audio captured: {e}")
 
 
 # ===============================================

@@ -13,8 +13,12 @@ services:
       - LOG_LEVEL=INFO
       - HARDWARE_HEALTH_CHECK_INTERVAL=30
       - AUDIO_BUFFER_SIZE=10
+      - AUDIO_VERIFICATION_ENABLED=true
+      - AUDIO_VERIFICATION_DAYS=7
+      - AUDIO_VERIFICATION_MAX_FILES=100
     volumes:
       - ./puertocho-assistant-backend/src:/app/src
+      - ./puertocho-assistant-backend/audio_verification:/app/audio_verification
     depends_on:
       - puertocho-assistant-hardware
     restart: unless-stopped
@@ -95,4 +99,6 @@ volumes:
   puertocho-logs:
     driver: local
   puertocho-config:
+    driver: local
+  puertocho-audio-verification:
     driver: local

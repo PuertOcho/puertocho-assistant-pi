@@ -46,8 +46,20 @@ class AudioProcessor:
         self.temp_dir = Path(tempfile.gettempdir()) / "puertocho_audio_buffer"
         self.temp_dir.mkdir(exist_ok=True)
         
+        # Configuración de verificación de audio
+        self.verification_enabled = os.getenv("AUDIO_VERIFICATION_ENABLED", "true").lower() == "true"
+        self.verification_days = int(os.getenv("AUDIO_VERIFICATION_DAYS", "7"))
+        self.verification_max_files = int(os.getenv("AUDIO_VERIFICATION_MAX_FILES", "100"))
+        self.verification_dir = Path("/app/audio_verification")
+        
+        if self.verification_enabled:
+            self.verification_dir.mkdir(exist_ok=True)
+            self.logger.info(f"🔍 Audio verification enabled: {self.verification_dir}")
+            self.logger.info(f"📅 Retention: {self.verification_days} days, max {self.verification_max_files} files")
+        
         # Tasks
         self._processing_task: Optional[asyncio.Task] = None
+        self._cleanup_task: Optional[asyncio.Task] = None
         self._running = False
     
     async def start(self):
@@ -56,6 +68,12 @@ class AudioProcessor:
         
         self._running = True
         self._processing_task = asyncio.create_task(self._processing_loop())
+        
+        # Limpieza inicial de archivos de verificación antiguos
+        if self.verification_enabled:
+            await self._cleanup_old_verification_files()
+            # Iniciar tarea de limpieza periódica (cada hora)
+            self._cleanup_task = asyncio.create_task(self._periodic_cleanup())
         
         self.logger.info("✅ Audio Processor started")
     
@@ -69,6 +87,13 @@ class AudioProcessor:
             self._processing_task.cancel()
             try:
                 await self._processing_task
+            except asyncio.CancelledError:
+                pass
+        
+        if self._cleanup_task:
+            self._cleanup_task.cancel()
+            try:
+                await self._cleanup_task
             except asyncio.CancelledError:
                 pass
         
@@ -121,6 +146,17 @@ class AudioProcessor:
             # Guardar audio en buffer temporal
             temp_file_path = await self._save_to_temp_buffer(processing_entry["id"], audio_data)
             processing_entry["temp_path"] = str(temp_file_path)
+            
+            # Guardar copia de verificación si está habilitado
+            verification_path = None
+            if self.verification_enabled:
+                verification_path = await self._save_verification_copy(
+                    processing_entry["id"], 
+                    filename, 
+                    audio_data
+                )
+                processing_entry["verification_path"] = str(verification_path)
+                self.logger.info(f"🔍 Verification copy saved: {verification_path}")
             
             # Agregar a cola de procesamiento
             await self._add_to_processing_queue(processing_entry)
@@ -356,22 +392,155 @@ class AudioProcessor:
             self.logger.warning(f"⚠️ Error during temp files cleanup: {e}")
     
     # ===============================================
+    # VERIFICACIÓN DE AUDIO
+    # ===============================================
+    
+    async def _save_verification_copy(self, audio_id: str, original_filename: str, audio_data: bytes) -> Path:
+        """
+        Guardar copia de verificación del audio.
+        
+        Args:
+            audio_id: ID del audio para procesamiento
+            original_filename: Nombre del archivo original del hardware
+            audio_data: Datos binarios del audio
+            
+        Returns:
+            Path al archivo de verificación guardado
+        """
+        try:
+            # Crear timestamp con microsegundos para evitar colisiones
+            now = datetime.now()
+            timestamp = now.strftime("%Y%m%d_%H%M%S")
+            microsec = now.strftime("%f")[:3]  # Primeros 3 dígitos de microsegundos
+            
+            # Formato: verification_YYYYMMDD_HHMMSS_microsec_original_filename.wav
+            verification_filename = f"verification_{timestamp}_{microsec}_{original_filename}"
+            verification_path = self.verification_dir / verification_filename
+            
+            # Guardar archivo
+            with open(verification_path, "wb") as f:
+                f.write(audio_data)
+            
+            self.logger.debug(f"🔍 Verification copy saved: {verification_path} ({len(audio_data)} bytes)")
+            
+            return verification_path
+            
+        except Exception as e:
+            self.logger.error(f"❌ Failed to save verification copy for {audio_id}: {e}")
+            raise
+    
+    async def _cleanup_old_verification_files(self):
+        """
+        Limpiar archivos de verificación antiguos basado en:
+        - Edad (días configurados)
+        - Cantidad máxima de archivos
+        """
+        if not self.verification_enabled or not self.verification_dir.exists():
+            return
+        
+        try:
+            verification_files = list(self.verification_dir.glob("verification_*.wav"))
+            
+            if not verification_files:
+                return
+            
+            # Ordenar por fecha de modificación (más recientes primero)
+            verification_files.sort(key=lambda f: f.stat().st_mtime, reverse=True)
+            
+            current_time = datetime.now().timestamp()
+            max_age_seconds = self.verification_days * 24 * 3600
+            
+            files_removed = 0
+            files_kept = 0
+            
+            for i, file_path in enumerate(verification_files):
+                should_remove = False
+                reason = ""
+                
+                # Verificar edad
+                file_age = current_time - file_path.stat().st_mtime
+                if file_age > max_age_seconds:
+                    should_remove = True
+                    reason = f"older than {self.verification_days} days"
+                
+                # Verificar límite de cantidad (mantener solo los más recientes)
+                elif i >= self.verification_max_files:
+                    should_remove = True
+                    reason = f"exceeds max files limit ({self.verification_max_files})"
+                
+                if should_remove:
+                    try:
+                        file_path.unlink()
+                        files_removed += 1
+                        self.logger.debug(f"🗑️ Removed verification file: {file_path.name} ({reason})")
+                    except Exception as e:
+                        self.logger.warning(f"⚠️ Failed to remove {file_path}: {e}")
+                else:
+                    files_kept += 1
+            
+            if files_removed > 0 or files_kept > 0:
+                self.logger.info(f"🗑️ Verification cleanup: removed {files_removed}, kept {files_kept} files")
+                
+        except Exception as e:
+            self.logger.error(f"❌ Error during verification files cleanup: {e}")
+    
+    async def _periodic_cleanup(self):
+        """Tarea periódica de limpieza de archivos de verificación (cada hora)"""
+        while self._running:
+            try:
+                # Esperar 1 hora
+                await asyncio.sleep(3600)  # 3600 segundos = 1 hora
+                
+                if self._running:  # Verificar que aún estamos corriendo
+                    self.logger.debug("🔄 Running periodic verification cleanup...")
+                    await self._cleanup_old_verification_files()
+                    
+            except asyncio.CancelledError:
+                self.logger.info("🔄 Periodic cleanup cancelled")
+                break
+            except Exception as e:
+                self.logger.error(f"❌ Error in periodic cleanup: {e}")
+                # Continuar con el loop a pesar del error
+                await asyncio.sleep(300)  # Esperar 5 minutos antes de reintentar
+    
+    # ===============================================
     # INFORMACIÓN Y ESTADÍSTICAS
     # ===============================================
     
     def get_queue_status(self) -> Dict[str, Any]:
         """Obtener estado de la cola de procesamiento"""
+        verification_stats = {}
+        
+        if self.verification_enabled and self.verification_dir.exists():
+            try:
+                verification_files = list(self.verification_dir.glob("verification_*.wav"))
+                total_size = sum(f.stat().st_size for f in verification_files)
+                verification_stats = {
+                    "verification_files_count": len(verification_files),
+                    "verification_total_size_bytes": total_size,
+                    "verification_directory": str(self.verification_dir)
+                }
+            except Exception as e:
+                verification_stats = {"verification_error": str(e)}
+        
         return {
             "queue_size": len(self.processing_queue),
             "is_processing": self.is_processing,
             "remote_available": self.remote_available,
             "max_queue_size": self.max_queue_size,
+            "verification_enabled": self.verification_enabled,
+            "verification_config": {
+                "days_retention": self.verification_days,
+                "max_files": self.verification_max_files
+            } if self.verification_enabled else None,
+            **verification_stats,
             "items": [
                 {
                     "id": entry["id"],
                     "status": entry["status"],
                     "received_at": entry["received_at"],
-                    "size_bytes": entry["size_bytes"]
+                    "size_bytes": entry["size_bytes"],
+                    "has_verification_copy": "verification_path" in entry
                 }
                 for entry in self.processing_queue
             ]
