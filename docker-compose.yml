@@ -29,7 +29,7 @@ services:
       retries: 3
       start_period: 40s
 
-  # Web Dashboard - Svelte Frontend
+  # Web Dashboard - Svelte Frontend with Kiosk Support
   puertocho-web-dashboard:
     build:
       context: ./puertocho-assistant-web-view
@@ -40,6 +40,19 @@ services:
       - NODE_ENV=production
       - VITE_BACKEND_WS_URL=ws://localhost:8000/ws
       - VITE_BACKEND_HTTP_URL=http://localhost:8000
+      # Kiosk mode configuration
+      - KIOSK_MODE=${KIOSK_MODE:-false}
+      - KIOSK_RESOLUTION=${KIOSK_RESOLUTION:-1920x1080}
+      - DASHBOARD_URL=http://localhost:3000
+      - KIOSK_BROWSER=chromium-browser
+      - KIOSK_RESTART_DELAY=5
+      - DISPLAY=${DISPLAY:-:0}
+    volumes:
+      # Mount X11 socket for kiosk mode (only needed if KIOSK_MODE=true)
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      # Mount device for potential touch screen access
+      - /dev:/dev:ro
+    privileged: false  # Set to true if touch screen access is needed
     depends_on:
       - puertocho-backend
     restart: unless-stopped
