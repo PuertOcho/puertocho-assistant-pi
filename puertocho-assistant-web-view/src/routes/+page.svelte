@@ -2,7 +2,9 @@
   import StatusIndicator from '$lib/components/StatusIndicator.svelte';
   import CommandHistory from '$lib/components/CommandHistory.svelte';
   import ManualActivation from '$lib/components/ManualActivation.svelte';
-  import { assistantStatus, commandHistory, isConnected } from '$lib/stores/assistantStore';
+  import AudioProcessor from '$lib/components/AudioProcessor.svelte';
+  import AudioHistory from '$lib/components/AudioHistory.svelte';
+  import { assistantStatus, commandHistory, isConnected, audioProcessingState } from '$lib/stores/assistantStore';
 </script>
 
 <main>
@@ -20,7 +22,18 @@
   </header>
 
   <section>
-    <CommandHistory commands={$commandHistory} />
+    <div class="dashboard-grid">
+      <!-- Left column: Commands and Status -->
+      <div class="left-column">
+        <CommandHistory commands={$commandHistory} />
+      </div>
+      
+      <!-- Right column: Audio Processing -->
+      <div class="right-column">
+        <AudioProcessor />
+        <AudioHistory />
+      </div>
+    </div>
   </section>
 </main>
 
@@ -83,7 +96,37 @@
 
   section {
     width: 100%;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+  
+  .dashboard-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+    width: 100%;
+  }
+  
+  .left-column,
+  .right-column {
     display: flex;
-    justify-content: center;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+  
+  /* Mobile responsiveness */
+  @media (max-width: 768px) {
+    .dashboard-grid {
+      grid-template-columns: 1fr;
+      gap: 1rem;
+    }
+    
+    main {
+      padding: 1rem;
+    }
+    
+    h1 {
+      font-size: 2rem;
+    }
   }
 </style>

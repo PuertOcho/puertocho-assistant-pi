@@ -1,9 +1,9 @@
 import { browser } from '$app/environment';
-import { assistantStatus, commandHistory, isConnected } from '$lib/stores/assistantStore';
+import { assistantStatus, commandHistory, isConnected, audioProcessingState, audioHistory } from '$lib/stores/assistantStore';
 
 let socket: WebSocket | null = null;
 
-const WEBSOCKET_URL = 'ws://localhost:8765/ws'; // URL del backend WebSocket
+const WEBSOCKET_URL = 'ws://localhost:8000/ws'; // URL del backend WebSocket
 
 export function connect() {
   // Solo conectar en el navegador, no en el servidor (SSR)
@@ -22,7 +22,88 @@ export function connect() {
 
   socket.onmessage = (event) => {
     const data = JSON.parse(event.data);
+    console.log('WebSocket message received:', data.type, data);
     
+    // Unified state updates from backend
+    if (data.type === 'unified_state_update') {
+      const payload = data.payload;
+      
+      // Update assistant status based on hardware state
+      if (payload.hardware?.state) {
+        const hardwareState = payload.hardware.state.toLowerCase();
+        if (hardwareState.includes('listening')) {
+          assistantStatus.set('listening');
+        } else if (hardwareState.includes('processing')) {
+          assistantStatus.set('processing');
+        } else {
+          assistantStatus.set('idle');
+        }
+      }
+      
+      // Update audio processing state
+      if (payload.backend?.audio_processor) {
+        audioProcessingState.update(current => ({
+          ...current,
+          status: payload.backend.audio_processor.status || 'idle',
+          queue_length: payload.backend.audio_processor.queue_length || 0,
+          total_processed: payload.backend.audio_processor.total_processed || current.total_processed
+        }));
+      }
+    }
+
+    // Audio processing events
+    if (data.type === 'audio_processing') {
+      const payload = data.payload;
+      
+      audioProcessingState.update(current => ({
+        ...current,
+        status: payload.status || current.status,
+        current_audio: payload.current_audio ? {
+          id: payload.current_audio.id || Date.now().toString(),
+          filename: payload.current_audio.filename || 'unknown',
+          timestamp: payload.current_audio.timestamp || new Date().toISOString(),
+          duration: payload.current_audio.duration || 0,
+          size: payload.current_audio.size || 0,
+          status: payload.current_audio.status || 'processing',
+          quality_score: payload.current_audio.quality_score
+        } : current.current_audio
+      }));
+      
+      // Add to history if completed
+      if (payload.status === 'completed' && payload.current_audio) {
+        audioHistory.update(history => [
+          {
+            id: payload.current_audio.id || Date.now().toString(),
+            filename: payload.current_audio.filename || 'unknown',
+            timestamp: payload.current_audio.timestamp || new Date().toISOString(),
+            duration: payload.current_audio.duration || 0,
+            size: payload.current_audio.size || 0,
+            status: 'completed',
+            quality_score: payload.current_audio.quality_score,
+            url: payload.current_audio.url
+          },
+          ...history
+        ].slice(0, 50)); // Keep last 50 items
+      }
+    }
+
+    // Hardware events
+    if (data.type === 'hardware_event') {
+      const payload = data.payload;
+      
+      if (payload.event_type === 'voice_activity_start') {
+        assistantStatus.set('listening');
+      } else if (payload.event_type === 'voice_activity_end') {
+        assistantStatus.set('processing');
+      } else if (payload.event_type === 'audio_sent_to_backend') {
+        audioProcessingState.update(current => ({
+          ...current,
+          status: 'receiving'
+        }));
+      }
+    }
+
+    // Legacy message handling
     if (data.type === 'status_update') {
       assistantStatus.set(data.payload.status);
     }
@@ -33,6 +114,38 @@ export function connect() {
         command: data.payload.command,
       };
       commandHistory.update(history => [...history, newCommand]);
+    }
+
+    // Connection info
+    if (data.type === 'connection_info') {
+      console.log('Backend connection established:', data.payload.message);
+    }
+
+    // Initial state
+    if (data.type === 'initial_state') {
+      const payload = data.payload;
+      
+      // Set initial hardware state
+      if (payload.hardware?.state) {
+        const hardwareState = payload.hardware.state.toLowerCase();
+        if (hardwareState.includes('listening')) {
+          assistantStatus.set('listening');
+        } else if (hardwareState.includes('processing')) {
+          assistantStatus.set('processing');
+        } else {
+          assistantStatus.set('idle');
+        }
+      }
+      
+      // Set initial audio processing state
+      if (payload.backend?.audio_processor) {
+        audioProcessingState.set({
+          status: payload.backend.audio_processor.status || 'idle',
+          queue_length: payload.backend.audio_processor.queue_length || 0,
+          total_processed: payload.backend.audio_processor.total_processed || 0,
+          verification_files: []
+        });
+      }
     }
   };
 

@@ -47,31 +47,59 @@
   - ✅ Validación de integridad de archivos de audio
   - ✅ Estadísticas de rendimiento y uso de espacio en disco
 
-- [ ] **1.3 Verificar transmisión WebSocket**
-  - [ ] Confirmar que `_send_captured_audio_to_backend()` en hardware funciona correctamente
-  - [ ] Validar formato base64 y metadatos enviados
-  - [ ] Verificar que WebSocketManager recibe y procesa correctamente
-  - [ ] Añadir endpoint para verificar archivos recibidos
-
 ### 2. Preparar una primera interfaz gráfica con las nuevas implementaciones del backend
 
-- [ ] **2.1 Actualizar conexión WebSocket en web-view**
-  - [ ] Crear servicio WebSocket para conectar con backend (puerto 8000)
-  - [ ] Implementar manejo de mensajes de audio procesado
-  - [ ] Añadir store para estado de procesamiento de audio
-  - [ ] Integrar con `assistantStore.ts` existente
+- [x] **2.1 Actualizar conexión WebSocket en web-view**
+  - [x] Crear servicio WebSocket para conectar con backend (puerto 8000)
+  - [x] Implementar manejo de mensajes de audio procesado
+  - [x] Añadir store para estado de procesamiento de audio
+  - [x] Integrar con `assistantStore.ts` existente
 
-- [ ] **2.2 Crear componentes de visualización de audio**
-  - [ ] Componente `AudioProcessor.svelte` para mostrar estado de procesamiento
-  - [ ] Componente `AudioHistory.svelte` para lista de audios procesados
-  - [ ] Componente `AudioPlayer.svelte` para reproducir audios guardados
-  - [ ] Visualizador de volumen en tiempo real
+- [x] **2.2 Crear componentes de visualización de audio**
+  - [x] Componente `AudioProcessor.svelte` para mostrar estado de procesamiento
+  - [x] Componente `AudioHistory.svelte` para lista de audios procesados
+  - [x] Componente `AudioPlayer.svelte` para reproducir audios guardados
+  - [x] Visualizador de volumen en tiempo real
 
-- [ ] **2.3 Integrar con la interfaz existente**
-  - [ ] Añadir sección de audio a `+page.svelte`
-  - [ ] Actualizar `StatusIndicator.svelte` para incluir estado de audio
-  - [ ] Mejorar `CommandHistory.svelte` para mostrar audios asociados
-  - [ ] Implementar notificaciones de estado de procesamiento
+- [x] **2.3 Integrar con la interfaz existente**
+  - [x] Añadir sección de audio a `+page.svelte`
+  - [x] Actualizar `StatusIndicator.svelte` para incluir estado de audio
+  - [x] Mejorar `CommandHistory.svelte` para mostrar audios asociados
+  - [x] Implementar notificaciones de estado de procesamiento
+
+**✅ IMPLEMENTADO:**
+- ✅ WebSocket service actualizado para conectar correctamente al backend (puerto 8000)
+- ✅ Store expandido con tipos TypeScript para audio processing
+- ✅ Manejo completo de mensajes WebSocket: unified_state_update, audio_processing, hardware_event
+- ✅ Componentes modulares: AudioProcessor, AudioHistory, AudioPlayer
+- ✅ Dashboard con layout responsive de 2 columnas (comandos + audio)
+- ✅ StatusIndicator mejorado con información de audio y queue
+- ✅ AudioApiService para comunicación con endpoints del backend
+
+**🚀 MEJORAS DE ESCALABILIDAD IMPLEMENTADAS:**
+- ✅ **audioStore.ts**: Store separado y modular para audio con actions y auto-sync
+- ✅ **appConfig.ts**: Sistema de configuración centralizado con overrides por entorno
+- ✅ **errorHandling.ts**: Sistema robusto de manejo de errores y logging
+- ✅ **performanceMonitor**: Monitoreo de rendimiento integrado
+- ✅ **Arquitectura modular**: Separación clara de responsabilidades
+- ✅ **TypeScript interfaces**: Contratos bien definidos entre componentes
+- ✅ **Auto-recovery**: Recuperación automática de errores de red/WebSocket
+- ✅ **Configuración por entorno**: Support para development/production
+- ✅ **Error boundaries**: Manejo graceful de errores en UI
+- ✅ **Performance tracking**: Métricas de rendimiento para debugging
+  
+  **✅ IMPLEMENTADO:**
+  - ✅ WebSocket service actualizado para conectar al puerto 8000 del backend
+  - ✅ Store expandido con tipos para audio processing (AudioProcessingState, AudioFile)
+  - ✅ Manejo completo de mensajes WebSocket: unified_state_update, audio_processing, hardware_event
+  - ✅ Componente AudioProcessor con estado en tiempo real, métricas y progreso visual
+  - ✅ Componente AudioHistory con lista de archivos, controles de reproducción y descarga
+  - ✅ Componente AudioPlayer con controles completos, barra de progreso y volumen
+  - ✅ Dashboard con layout de 2 columnas: comandos + audio processing
+  - ✅ StatusIndicator actualizado con estado de audio y queue length
+  - ✅ Servicio audioApiService.ts para comunicación con endpoints del backend
+  - ✅ Interfaz responsive con adaptación móvil
+  - ✅ Integración completa con el sistema de estados unificado del backend
 
 ### 3. Modo kiosko y táctil para puertocho-assistant-web-view
 
