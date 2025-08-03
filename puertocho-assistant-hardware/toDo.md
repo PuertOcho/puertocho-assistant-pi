@@ -101,25 +101,39 @@
   - ✅ Interfaz responsive con adaptación móvil
   - ✅ Integración completa con el sistema de estados unificado del backend
 
-### 3. Modo kiosko y táctil para puertocho-assistant-web-view
+### 3. Modo kiosko y táctil para puertocho-assistant-web-view ✅
 
-- [ ] **3.1 Configuración de arranque automático**
-  - [ ] Crear script de inicio que lance en modo fullscreen
-  - [ ] Configurar autostart en Raspberry Pi
-  - [ ] Añadir parámetros de línea de comandos para kiosko
-  - [ ] Implementar detección automática de pantalla táctil
+- [x] **3.1 Configuración de arranque automático**
+  - [x] Crear script de inicio que lance en modo fullscreen
+  - [x] Configurar autostart en Raspberry Pi
+  - [x] Añadir parámetros de línea de comandos para kiosko
+  - [x] Implementar detección automática de pantalla táctil
 
-- [ ] **3.2 Optimización para pantalla táctil**
-  - [ ] Aumentar tamaño de botones y elementos interactivos
-  - [ ] Implementar gestos táctiles (swipe, tap, long press)
-  - [ ] Añadir feedback visual para interacciones táctiles
-  - [ ] Optimizar layout para resoluciones de pantalla pequeñas
+- [x] **3.2 Optimización para pantalla táctil**
+  - [x] Aumentar tamaño de botones y elementos interactivos
+  - [x] Implementar gestos táctiles (swipe, tap, long press)
+  - [x] Añadir feedback visual para interacciones táctiles
+  - [x] Optimizar layout para resoluciones de pantalla pequeñas
 
-- [ ] **3.3 Configuración del sistema**
-  - [ ] Crear dockerfile con configuración de kiosko
-  - [ ] Añadir variables de entorno para modo kiosko
-  - [ ] Configurar nginx para servir en modo fullscreen
-  - [ ] Implementar script de reinicio automático en caso de error
+- [x] **3.3 Configuración del sistema**
+  - [x] Crear dockerfile con configuración de kiosko
+  - [x] Añadir variables de entorno para modo kiosko
+  - [x] Configurar nginx para servir en modo fullscreen
+  - [x] Implementar script de reinicio automático en caso de error
+
+**✅ IMPLEMENTADO:**
+- ✅ **Scripts de kiosko**: `kiosk-launcher.sh` y `kiosk-control.sh` para gestión completa del modo kiosko
+- ✅ **Docker configurado**: Dockerfile con todas las dependencias X11, chromium y supervisor
+- ✅ **Supervisor**: Gestión de procesos nginx + kiosk con reinicio automático
+- ✅ **Variables de entorno**: Sistema completo de configuración (KIOSK_MODE, DISPLAY, resolución)
+- ✅ **X11 integrado**: Montaje correcto de socket X11 para acceso desde contenedor
+- ✅ **Auto-arranque**: Configuración permanente de DISPLAY y xhost en .bashrc
+- ✅ **Interface responsive**: Dashboard adaptado automáticamente a resoluciones de pantalla pequeñas
+- ✅ **Gestión de errores**: Sistema robusto de recuperación automática ante fallos
+- ✅ **Logging completo**: Sistema de logs detallado para depuración y monitoreo
+- ✅ **Configuración persistente**: Archivo .env con todas las variables del kiosko configuradas
+- ✅ **Pantalla completa**: Chromium lanzado en modo fullscreen sin bordes ni barras
+- ✅ **Compatibilidad Raspberry Pi**: Funcionamiento verificado en hardware real con pantalla táctil
 
 ### 4. Reproducir el audio recibido desde hardware como respuesta
 
@@ -146,7 +160,3 @@
   - [ ] Validar latencia total del sistema
   - [ ] Testing de calidad de audio (pérdida en compresión/transmisión)
   - [ ] Pruebas de estabilidad con múltiples ciclos
-
-## Completadas
-
-<!-- Las tareas completadas se moverán aquí -->
