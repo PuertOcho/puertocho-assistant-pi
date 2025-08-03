@@ -116,102 +116,307 @@ class AudioProcessor:
         Returns:
             Resultado del procesamiento
         """
+        processing_start = datetime.now()
+        audio_id = None
+        
         try:
             self.logger.info("🎙️ Processing audio from hardware...")
             
+            # Logging de métricas de entrada si están disponibles
+            if "audio_metrics" in audio_info:
+                metrics = audio_info["audio_metrics"]
+                self.logger.info(f"🎵 Audio metrics - Format: {metrics.get('estimated_format')}, "
+                               f"Size: {metrics.get('size_bytes')} bytes, "
+                               f"Channels: {metrics.get('channels')}, "
+                               f"Sample Rate: {metrics.get('sample_rate_hz')} Hz")
+                
+                if metrics.get('estimated_duration_seconds'):
+                    self.logger.info(f"⏱️ Estimated duration: {metrics['estimated_duration_seconds']:.2f} seconds")
+            
             # Obtener información del último audio capturado
+            self.logger.info("🔗 Connecting to hardware client...")
             hardware_client = get_hardware_client()
+            
+            hardware_fetch_start = datetime.now()
             latest_audio = await hardware_client.get_latest_audio()
+            hardware_fetch_duration = (datetime.now() - hardware_fetch_start).total_seconds()
+            
+            self.logger.info(f"📡 Hardware fetch completed in {hardware_fetch_duration:.3f} seconds")
             
             if not latest_audio.get("success"):
-                raise Exception("No audio available from hardware")
+                error_msg = f"No audio available from hardware: {latest_audio}"
+                self.logger.error(f"❌ {error_msg}")
+                raise Exception(error_msg)
             
             audio_file_info = latest_audio["latest_audio"]
             filename = audio_file_info["filename"]
             
+            self.logger.info(f"📄 Hardware audio file info: {audio_file_info}")
+            
             # Descargar archivo de audio
+            download_start = datetime.now()
             self.logger.info(f"📥 Downloading audio file: {filename}")
             audio_data = await hardware_client.download_audio(filename)
+            download_duration = (datetime.now() - download_start).total_seconds()
             
-            # Crear entrada para procesamiento
+            # Validar descarga
+            if not audio_data:
+                raise Exception(f"Downloaded audio data is empty for file: {filename}")
+            
+            download_size_kb = len(audio_data) / 1024
+            download_speed_kbps = download_size_kb / download_duration if download_duration > 0 else 0
+            
+            self.logger.info(f"📦 Download completed: {len(audio_data)} bytes ({download_size_kb:.2f} KB) "
+                           f"in {download_duration:.3f} seconds ({download_speed_kbps:.2f} KB/s)")
+            
+            # Validar integridad básica del audio
+            integrity_check = self._validate_audio_integrity(audio_data, filename)
+            self.logger.info(f"🔍 Audio integrity check: {integrity_check}")
+            
+            # Crear entrada para procesamiento con información extendida
+            audio_id = f"audio_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}"
             processing_entry = {
-                "id": f"audio_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+                "id": audio_id,
                 "filename": filename,
+                "original_filename": audio_info.get("filename", filename),
                 "size_bytes": len(audio_data),
-                "received_at": datetime.now().isoformat(),
+                "received_at": audio_info.get("received_at", datetime.now().isoformat()),
+                "processing_started_at": processing_start.isoformat(),
                 "status": "pending",
-                "metadata": audio_file_info
+                "metadata": audio_file_info,
+                "source_info": audio_info,
+                "integrity_check": integrity_check,
+                "timing": {
+                    "hardware_fetch_seconds": hardware_fetch_duration,
+                    "download_seconds": download_duration,
+                    "download_speed_kbps": download_speed_kbps
+                }
             }
             
+            self.logger.info(f"🆔 Created processing entry with ID: {audio_id}")
+            
             # Guardar audio en buffer temporal
+            temp_save_start = datetime.now()
             temp_file_path = await self._save_to_temp_buffer(processing_entry["id"], audio_data)
+            temp_save_duration = (datetime.now() - temp_save_start).total_seconds()
+            
             processing_entry["temp_path"] = str(temp_file_path)
+            processing_entry["timing"]["temp_save_seconds"] = temp_save_duration
+            
+            self.logger.info(f"💾 Temporary file saved in {temp_save_duration:.3f} seconds: {temp_file_path}")
             
             # Guardar copia de verificación si está habilitado
             verification_path = None
             if self.verification_enabled:
+                verification_start = datetime.now()
                 verification_path = await self._save_verification_copy(
                     processing_entry["id"], 
                     filename, 
                     audio_data
                 )
+                verification_duration = (datetime.now() - verification_start).total_seconds()
+                
                 processing_entry["verification_path"] = str(verification_path)
-                self.logger.info(f"🔍 Verification copy saved: {verification_path}")
+                processing_entry["timing"]["verification_save_seconds"] = verification_duration
+                
+                self.logger.info(f"🔍 Verification copy saved in {verification_duration:.3f} seconds: {verification_path}")
             
             # Agregar a cola de procesamiento
+            queue_add_start = datetime.now()
             await self._add_to_processing_queue(processing_entry)
+            queue_add_duration = (datetime.now() - queue_add_start).total_seconds()
+            
+            current_queue_size = len(self.processing_queue)
+            self.logger.info(f"📋 Added to processing queue in {queue_add_duration:.3f} seconds. "
+                           f"Queue size: {current_queue_size}/{self.max_queue_size}")
+            
+            # Calcular tiempo total de procesamiento hasta aquí
+            total_processing_time = (datetime.now() - processing_start).total_seconds()
             
             # Notificar al frontend
             if self.websocket_manager:
+                notification_start = datetime.now()
                 await self.websocket_manager.broadcast_audio_processing({
                     "action": "audio_received",
                     "audio_id": processing_entry["id"],
                     "filename": filename,
                     "size_bytes": len(audio_data),
-                    "queue_size": len(self.processing_queue)
+                    "queue_size": current_queue_size,
+                    "processing_time_seconds": total_processing_time
                 })
+                notification_duration = (datetime.now() - notification_start).total_seconds()
+                self.logger.info(f"📡 Frontend notification sent in {notification_duration:.3f} seconds")
             
-            return {
+            # Resultado exitoso con métricas detalladas
+            result = {
                 "success": True,
                 "audio_id": processing_entry["id"],
                 "status": "queued_for_processing",
-                "queue_position": len(self.processing_queue)
+                "queue_position": current_queue_size,
+                "processing_metrics": {
+                    "total_processing_time_seconds": total_processing_time,
+                    "hardware_fetch_seconds": hardware_fetch_duration,
+                    "download_seconds": download_duration,
+                    "temp_save_seconds": temp_save_duration,
+                    "verification_save_seconds": verification_duration if verification_path else 0,
+                    "queue_add_seconds": queue_add_duration
+                }
             }
             
+            self.logger.info(f"✅ Audio processing completed successfully in {total_processing_time:.3f} seconds - ID: {audio_id}")
+            return result
+            
         except Exception as e:
+            total_error_time = (datetime.now() - processing_start).total_seconds()
+            
             self.logger.error(f"❌ Failed to process audio from hardware: {e}")
+            self.logger.error(f"💥 Error occurred after {total_error_time:.3f} seconds")
+            self.logger.error(f"🆔 Failed audio ID: {audio_id or 'not assigned'}")
             
             if self.websocket_manager:
-                await self.websocket_manager.broadcast_error(
-                    f"Audio processing failed: {str(e)}"
-                )
+                try:
+                    await self.websocket_manager.broadcast_error(
+                        f"Audio processing failed: {str(e)}"
+                    )
+                except Exception as notify_error:
+                    self.logger.error(f"📡 Failed to send error notification: {notify_error}")
             
             return {
                 "success": False,
-                "error": str(e)
+                "error": str(e),
+                "audio_id": audio_id,
+                "error_after_seconds": total_error_time
             }
     
+    def _validate_audio_integrity(self, audio_data: bytes, filename: str) -> Dict[str, Any]:
+        """
+        Valida la integridad básica del archivo de audio.
+        
+        Args:
+            audio_data: Datos del audio
+            filename: Nombre del archivo
+            
+        Returns:
+            Resultado de la validación
+        """
+        validation = {
+            "is_valid": False,
+            "format_detected": "unknown",
+            "issues": []
+        }
+        
+        try:
+            # Verificar que no esté vacío
+            if len(audio_data) == 0:
+                validation["issues"].append("Audio data is empty")
+                return validation
+            
+            # Verificar formato WAV
+            if audio_data.startswith(b'RIFF') and len(audio_data) > 8 and audio_data[8:12] == b'WAVE':
+                validation["format_detected"] = "wav"
+                
+                # Verificar tamaño mínimo para header WAV
+                if len(audio_data) < 44:
+                    validation["issues"].append("WAV file too small (missing header)")
+                else:
+                    validation["is_valid"] = True
+                    
+            # Verificar formato MP3
+            elif audio_data.startswith(b'ID3') or audio_data.startswith(b'\xff\xfb'):
+                validation["format_detected"] = "mp3"
+                validation["is_valid"] = True
+                
+            else:
+                validation["issues"].append("Unrecognized audio format")
+            
+            # Verificar extensión vs contenido
+            file_ext = filename.split('.')[-1].lower() if '.' in filename else ""
+            if file_ext and validation["format_detected"] != "unknown":
+                if file_ext != validation["format_detected"]:
+                    validation["issues"].append(f"Extension '{file_ext}' doesn't match detected format '{validation['format_detected']}'")
+            
+        except Exception as e:
+            validation["issues"].append(f"Validation error: {str(e)}")
+        
+        return validation
+    
     async def _save_to_temp_buffer(self, audio_id: str, audio_data: bytes) -> Path:
-        """Guardar audio en buffer temporal"""
+        """Guardar audio en buffer temporal con logging detallado"""
         temp_file_path = self.temp_dir / f"{audio_id}.wav"
         
-        with open(temp_file_path, "wb") as f:
-            f.write(audio_data)
-        
-        self.logger.debug(f"💾 Audio saved to temp buffer: {temp_file_path}")
-        return temp_file_path
+        try:
+            # Verificar que el directorio temporal existe
+            self.temp_dir.mkdir(exist_ok=True)
+            
+            # Escribir archivo con medición de tiempo
+            write_start = datetime.now()
+            with open(temp_file_path, "wb") as f:
+                f.write(audio_data)
+            write_duration = (datetime.now() - write_start).total_seconds()
+            
+            # Verificar que el archivo se escribió correctamente
+            if not temp_file_path.exists():
+                raise Exception(f"Temp file was not created: {temp_file_path}")
+            
+            written_size = temp_file_path.stat().st_size
+            if written_size != len(audio_data):
+                raise Exception(f"Size mismatch: expected {len(audio_data)}, written {written_size}")
+            
+            write_speed_kbps = (len(audio_data) / 1024) / write_duration if write_duration > 0 else 0
+            
+            self.logger.debug(f"💾 Audio saved to temp buffer: {temp_file_path}")
+            self.logger.debug(f"📏 Write performance: {len(audio_data)} bytes in {write_duration:.3f}s ({write_speed_kbps:.2f} KB/s)")
+            
+            return temp_file_path
+            
+        except Exception as e:
+            self.logger.error(f"❌ Failed to save audio to temp buffer: {e}")
+            self.logger.error(f"📁 Temp directory: {self.temp_dir}")
+            self.logger.error(f"📄 Target file: {temp_file_path}")
+            raise
     
     async def _add_to_processing_queue(self, entry: Dict[str, Any]):
-        """Agregar entrada a la cola de procesamiento"""
-        # Verificar límite de cola
-        if len(self.processing_queue) >= self.max_queue_size:
-            # Remover la entrada más antigua
-            oldest_entry = self.processing_queue.pop(0)
-            await self._cleanup_temp_file(oldest_entry.get("temp_path"))
-            self.logger.warning(f"⚠️ Queue full, removed oldest entry: {oldest_entry.get('id')}")
+        """Agregar entrada a la cola de procesamiento con logging mejorado"""
+        entry_id = entry.get('id', 'unknown')
+        queue_size_before = len(self.processing_queue)
         
-        self.processing_queue.append(entry)
-        self.logger.info(f"📋 Added to processing queue: {entry['id']} (queue size: {len(self.processing_queue)})")
+        try:
+            # Verificar límite de cola
+            if queue_size_before >= self.max_queue_size:
+                # Remover la entrada más antigua
+                oldest_entry = self.processing_queue.pop(0)
+                oldest_id = oldest_entry.get('id', 'unknown')
+                
+                # Cleanup del archivo temporal
+                temp_path = oldest_entry.get("temp_path")
+                if temp_path:
+                    try:
+                        await self._cleanup_temp_file(temp_path)
+                        self.logger.warning(f"🧹 Cleaned up temp file for removed entry: {temp_path}")
+                    except Exception as cleanup_error:
+                        self.logger.error(f"❌ Failed to cleanup temp file {temp_path}: {cleanup_error}")
+                
+                self.logger.warning(f"⚠️ Queue full ({self.max_queue_size}), removed oldest entry: {oldest_id}")
+            
+            # Agregar nueva entrada
+            self.processing_queue.append(entry)
+            queue_size_after = len(self.processing_queue)
+            
+            self.logger.info(f"📋 Added to processing queue: {entry_id}")
+            self.logger.info(f"📊 Queue stats: {queue_size_before} → {queue_size_after}/{self.max_queue_size}")
+            
+            # Log información adicional de la entrada
+            if 'size_bytes' in entry:
+                size_kb = entry['size_bytes'] / 1024
+                self.logger.debug(f"📦 Entry size: {size_kb:.2f} KB")
+            
+            if 'filename' in entry:
+                self.logger.debug(f"📄 Entry filename: {entry['filename']}")
+                
+        except Exception as e:
+            self.logger.error(f"❌ Failed to add entry to processing queue: {e}")
+            self.logger.error(f"🆔 Entry ID: {entry_id}")
+            raise
     
     # ===============================================
     # LOOP DE PROCESAMIENTO
@@ -503,6 +708,215 @@ class AudioProcessor:
                 # Continuar con el loop a pesar del error
                 await asyncio.sleep(300)  # Esperar 5 minutos antes de reintentar
     
+    # ===============================================
+    # MÉTODOS DE VERIFICACIÓN Y DEBUGGING
+    # ===============================================
+    
+    async def get_verification_files_info(self) -> Dict[str, Any]:
+        """
+        Obtener información detallada de los archivos de verificación.
+        """
+        if not self.verification_enabled:
+            return {
+                "enabled": False,
+                "message": "Audio verification is disabled"
+            }
+        
+        try:
+            if not self.verification_dir.exists():
+                self.verification_dir.mkdir(exist_ok=True)
+            
+            verification_files = list(self.verification_dir.glob("verification_*.wav"))
+            verification_files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
+            
+            files_info = []
+            total_size = 0
+            
+            for file_path in verification_files:
+                stat = file_path.stat()
+                file_info = {
+                    "filename": file_path.name,
+                    "size_bytes": stat.st_size,
+                    "created_at": datetime.fromtimestamp(stat.st_ctime).isoformat(),
+                    "modified_at": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+                    "age_hours": (datetime.now().timestamp() - stat.st_mtime) / 3600
+                }
+                files_info.append(file_info)
+                total_size += stat.st_size
+            
+            return {
+                "enabled": True,
+                "directory": str(self.verification_dir),
+                "total_files": len(files_info),
+                "total_size_bytes": total_size,
+                "total_size_mb": total_size / (1024 * 1024),
+                "retention_days": self.verification_days,
+                "max_files": self.verification_max_files,
+                "files": files_info[:10],  # Solo los 10 más recientes para evitar respuestas muy grandes
+                "showing_latest": min(10, len(files_info))
+            }
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error getting verification files info: {e}")
+            return {
+                "enabled": True,
+                "error": str(e)
+            }
+    
+    async def list_verification_files(self, limit: int = 50) -> List[Dict[str, Any]]:
+        """
+        Listar archivos de verificación con información detallada.
+        
+        Args:
+            limit: Número máximo de archivos a retornar
+        """
+        if not self.verification_enabled or not self.verification_dir.exists():
+            return []
+        
+        try:
+            verification_files = list(self.verification_dir.glob("verification_*.wav"))
+            verification_files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
+            
+            files_list = []
+            
+            for file_path in verification_files[:limit]:
+                stat = file_path.stat()
+                
+                # Intentar extraer información del nombre del archivo
+                filename_parts = file_path.stem.split('_')
+                original_info = {}
+                if len(filename_parts) >= 6:  # verification_YYYYMMDD_HHMMSS_microsec_original_filename
+                    try:
+                        date_part = filename_parts[1]
+                        time_part = filename_parts[2]
+                        original_info = {
+                            "capture_date": f"{date_part[:4]}-{date_part[4:6]}-{date_part[6:8]}",
+                            "capture_time": f"{time_part[:2]}:{time_part[2:4]}:{time_part[4:6]}",
+                            "original_filename": "_".join(filename_parts[4:])
+                        }
+                    except (IndexError, ValueError):
+                        pass
+                
+                file_info = {
+                    "filename": file_path.name,
+                    "full_path": str(file_path),
+                    "size_bytes": stat.st_size,
+                    "size_kb": stat.st_size / 1024,
+                    "created_at": datetime.fromtimestamp(stat.st_ctime).isoformat(),
+                    "modified_at": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+                    "age_hours": (datetime.now().timestamp() - stat.st_mtime) / 3600,
+                    **original_info
+                }
+                
+                files_list.append(file_info)
+            
+            return files_list
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error listing verification files: {e}")
+            return []
+    
+    def get_processing_statistics(self) -> Dict[str, Any]:
+        """
+        Obtener estadísticas detalladas de procesamiento.
+        """
+        try:
+            # Estadísticas básicas de la cola
+            queue_stats = {
+                "current_queue_size": len(self.processing_queue),
+                "max_queue_size": self.max_queue_size,
+                "is_processing": self.is_processing,
+                "remote_available": self.remote_available
+            }
+            
+            # Análisis de la cola actual
+            if self.processing_queue:
+                sizes = [entry.get("size_bytes", 0) for entry in self.processing_queue]
+                queue_analysis = {
+                    "total_queue_size_bytes": sum(sizes),
+                    "average_file_size_bytes": sum(sizes) / len(sizes),
+                    "min_file_size_bytes": min(sizes) if sizes else 0,
+                    "max_file_size_bytes": max(sizes) if sizes else 0,
+                    "oldest_entry_age_seconds": self._calculate_entry_age(self.processing_queue[0]) if self.processing_queue else 0,
+                    "newest_entry_age_seconds": self._calculate_entry_age(self.processing_queue[-1]) if self.processing_queue else 0
+                }
+            else:
+                queue_analysis = {
+                    "total_queue_size_bytes": 0,
+                    "average_file_size_bytes": 0,
+                    "min_file_size_bytes": 0,
+                    "max_file_size_bytes": 0,
+                    "oldest_entry_age_seconds": 0,
+                    "newest_entry_age_seconds": 0
+                }
+            
+            # Información de directorios
+            temp_dir_stats = self._get_directory_stats(self.temp_dir)
+            verification_dir_stats = self._get_directory_stats(self.verification_dir) if self.verification_enabled else {}
+            
+            return {
+                "queue": queue_stats,
+                "queue_analysis": queue_analysis,
+                "directories": {
+                    "temp": temp_dir_stats,
+                    "verification": verification_dir_stats
+                },
+                "configuration": {
+                    "verification_enabled": self.verification_enabled,
+                    "verification_retention_days": self.verification_days if self.verification_enabled else None,
+                    "verification_max_files": self.verification_max_files if self.verification_enabled else None
+                },
+                "timestamp": datetime.now().isoformat()
+            }
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error getting processing statistics: {e}")
+            return {
+                "error": str(e),
+                "timestamp": datetime.now().isoformat()
+            }
+    
+    def _calculate_entry_age(self, entry: Dict[str, Any]) -> float:
+        """Calcular la edad de una entrada en segundos"""
+        try:
+            received_at = datetime.fromisoformat(entry.get("received_at", datetime.now().isoformat()))
+            return (datetime.now() - received_at).total_seconds()
+        except Exception:
+            return 0.0
+    
+    def _get_directory_stats(self, directory: Path) -> Dict[str, Any]:
+        """Obtener estadísticas de un directorio"""
+        try:
+            if not directory.exists():
+                return {"exists": False}
+            
+            files = list(directory.glob("*"))
+            if not files:
+                return {"exists": True, "file_count": 0, "total_size_bytes": 0}
+            
+            total_size = sum(f.stat().st_size for f in files if f.is_file())
+            
+            return {
+                "exists": True,
+                "path": str(directory),
+                "file_count": len([f for f in files if f.is_file()]),
+                "total_size_bytes": total_size,
+                "total_size_mb": total_size / (1024 * 1024),
+                "free_space_bytes": self._get_free_space(directory)
+            }
+            
+        except Exception as e:
+            return {"exists": True, "error": str(e)}
+    
+    def _get_free_space(self, directory: Path) -> int:
+        """Obtener espacio libre en el directorio"""
+        try:
+            import shutil
+            total, used, free = shutil.disk_usage(directory)
+            return free
+        except Exception:
+            return -1
+
     # ===============================================
     # INFORMACIÓN Y ESTADÍSTICAS
     # ===============================================
