@@ -137,26 +137,88 @@
 
 ### 4. Reproducir el audio recibido desde hardware como respuesta
 
-- [ ] **4.1 Implementar reproducción en AudioManager (hardware)**
+**OBJETIVO**: Implementar comunicación completa con Backend Remoto y reproducción de respuestas de audio.
+
+**ARQUITECTURA**:
+```
+┌─────────────────┐     HTTP/WS    ┌─────────────────┐     HTTP/Auth   ┌─────────────────┐
+│   HARDWARE      │◄──────────────►│  BACKEND LOCAL  │◄───────────────►│ BACKEND REMOTO  │
+│ (Puerto 8080)   │                │ (Puerto 8000)   │                 │ (Puerto 10002)  │
+│ - Captura audio │                │ - Orquestador   │                 │ - Procesamiento │
+│ - Reproduce     │                │ - Auth Manager  │                 │ - IA/LLM        │
+│   respuestas    │                │ - Client HTTP   │                 │ - TTS/STT       │
+└─────────────────┘                └─────────────────┘                 └─────────────────┘
+        ▲                                  ▲
+        │ WebSocket                        │ WebSocket
+        │                                  ▼
+        │                          ┌─────────────────┐
+        └──────────────────────────│    WEB VIEW     │
+                                   │ (Puerto 3000)   │
+                                   │ - Control UI    │
+                                   │ - Monitoreo     │
+                                   └─────────────────┘
+```
+
+**CREDENCIALES BACKEND REMOTO**:
+- **URL**: `http://192.168.1.88:10002`
+- **Email**: `service@puertocho.local`
+- **Password**: `servicepass123`
+
+- [x] **4.1 Implementar Cliente de Backend Remoto**
+  - [x] Crear `RemoteBackendClient` en `puertocho-assistant-backend/src/clients/remote_backend_client.py`
+  - [x] Implementar autenticación automática con auto-renovación de tokens
+  - [x] Añadir método `send_audio_for_processing()` con manejo de multipart/form-data
+  - [x] Integrar manejo de errores y reintentos
+  - [x] Añadir configuración por variables de entorno
+  
+  **✅ IMPLEMENTADO:**
+  - ✅ **RemoteBackendClient**: Cliente completo con autenticación JWT y auto-renovación
+  - ✅ **Variables de entorno**: Configuración completa en docker-compose.yml
+  - ✅ **Multipart upload**: Soporte para envío de audio con metadata y contexto
+  - ✅ **Error handling**: Reintentos automáticos y manejo robusto de errores
+  - ✅ **Health check**: Endpoint `/remote/status` para verificar conectividad
+  - ✅ **Lifecycle management**: Inicialización automática en startup del backend
+  - ✅ **Timeout configuration**: Configuración extendida para audio (60s por defecto)
+  - ✅ **Token management**: Renovación automática 5 minutos antes de expiración
+  - ✅ **Testing endpoint**: `/remote/test-auth` para diagnóstico de autenticación
+
+- [ ] **4.2 Actualizar AudioProcessor para Backend Remoto**
+  - [ ] Modificar `_send_to_remote_backend()` en `audio_processor.py`
+  - [ ] Implementar manejo de respuestas por tipo: `audio`, `text`, `action`
+  - [ ] Añadir método `_handle_audio_response()` para coordinar reproducción
+  - [ ] Integrar con `HardwareClient` para envío de audio a reproductor
+  - [ ] Actualizar flujo de WebSocket para notificar respuestas
+
+- [ ] **4.3 Implementar Reproducción en Hardware**
+  - [ ] Crear endpoint `/audio/play` en `http_server.py`
   - [ ] Añadir método `play_response_audio()` en `audio_manager.py`
-  - [ ] Integrar con sistema de eventos existente
-  - [ ] Manejar cola de reproducción para múltiples respuestas
-  - [ ] Implementar control de volumen
+  - [ ] Implementar decodificación de audio Base64 y conversión a numpy
+  - [ ] Manejar reproducción con chunks y control de stream
+  - [ ] Añadir estado `SPEAKING` al `StateManager`
 
-- [ ] **4.2 Configurar recepción de respuestas desde backend**
-  - [ ] Crear endpoint en hardware para recibir audio de respuesta
-  - [ ] Modificar WebSocket client para manejar respuestas de audio
-  - [ ] Implementar deserialización de audio base64
-  - [ ] Añadir validación de formato de audio recibido
+- [ ] **4.4 Integrar Cliente Hardware en Backend**
+  - [ ] Añadir método `play_audio_response()` en `hardware_client.py`
+  - [ ] Implementar serialización Base64 para envío de audio
+  - [ ] Manejar metadata y contexto de respuesta
+  - [ ] Coordinar con WebSocket para notificaciones en tiempo real
 
-- [ ] **4.3 Integración con flujo de estados**
-  - [ ] Modificar StateManager para estado `PLAYING_RESPONSE`
-  - [ ] Actualizar LED patterns para indicar reproducción
-  - [ ] Implementar timeout para respuestas largas
-  - [ ] Añadir manejo de interrupciones durante reproducción
+- [ ] **4.5 Actualizar Variables de Entorno y Configuración**
+  - [ ] Añadir variables `REMOTE_BACKEND_*` al `docker-compose.yml`
+  - [ ] Configurar credenciales: URL, usuario, password
+  - [ ] Actualizar `main.py` para inicializar cliente remoto
+  - [ ] Implementar gestión de ciclo de vida (startup/shutdown)
 
-- [ ] **4.4 Testing y validación**
-  - [ ] Crear tests para ciclo completo: captura → envío → respuesta → reproducción
-  - [ ] Validar latencia total del sistema
-  - [ ] Testing de calidad de audio (pérdida en compresión/transmisión)
-  - [ ] Pruebas de estabilidad con múltiples ciclos
+- [ ] **4.6 Testing de Flujo Completo**
+  - [ ] Probar autenticación con Backend Remoto
+  - [ ] Validar envío de audio con metadata
+  - [ ] Verificar recepción y reproducción de respuestas
+  - [ ] Testing de latencia y calidad de audio
+  - [ ] Pruebas de recuperación ante errores de red
+
+**FLUJO IMPLEMENTADO**:
+1. **Hardware** captura audio → envía a **Backend Local**
+2. **Backend Local** autentica con **Backend Remoto** → envía audio
+3. **Backend Remoto** procesa → devuelve respuesta (audio/texto/acción)
+4. **Backend Local** recibe respuesta → coordina reproducción en **Hardware**
+5. **Hardware** reproduce audio → notifica finalización
+6. **Web View** muestra estado en tiempo real durante todo el proceso

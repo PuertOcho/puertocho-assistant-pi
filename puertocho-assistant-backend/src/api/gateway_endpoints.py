@@ -745,6 +745,91 @@ async def get_audio_processing_history():
 
 
 # ===============================================
+# ENDPOINTS DEL CLIENTE REMOTO
+# ===============================================
+
+@router.get("/remote/status")
+async def get_remote_backend_status():
+    """
+    Verificar estado del cliente de backend remoto.
+    
+    Returns:
+        Dict con información de estado, autenticación y conectividad
+    """
+    try:
+        from clients.remote_backend_client import get_remote_client
+        
+        remote_client = get_remote_client()
+        health_status = await remote_client.health_check()
+        
+        return {
+            "success": True,
+            "timestamp": datetime.now().isoformat(),
+            "remote_backend": health_status
+        }
+        
+    except RuntimeError as e:
+        # Cliente no inicializado
+        return {
+            "success": False,
+            "error": str(e),
+            "remote_backend": {
+                "status": "not_initialized",
+                "authenticated": False
+            }
+        }
+    except Exception as e:
+        logger.error(f"❌ Failed to get remote backend status: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get remote backend status: {str(e)}"
+        )
+
+
+@router.post("/remote/test-auth")
+async def test_remote_authentication():
+    """
+    Probar autenticación con backend remoto.
+    
+    Útil para testing y diagnóstico de problemas de conexión.
+    """
+    try:
+        from clients.remote_backend_client import get_remote_client
+        
+        remote_client = get_remote_client()
+        
+        # Forzar nueva autenticación
+        success = await remote_client._authenticate()
+        
+        if success:
+            return {
+                "success": True,
+                "message": "Authentication successful",
+                "timestamp": datetime.now().isoformat(),
+                "token_expires_at": remote_client.token_expires_at.isoformat() if remote_client.token_expires_at else None
+            }
+        else:
+            return {
+                "success": False,
+                "message": "Authentication failed",
+                "timestamp": datetime.now().isoformat()
+            }
+            
+    except RuntimeError as e:
+        # Cliente no inicializado
+        raise HTTPException(
+            status_code=503,
+            detail=f"Remote client not initialized: {str(e)}"
+        )
+    except Exception as e:
+        logger.error(f"❌ Failed to test remote authentication: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to test remote authentication: {str(e)}"
+        )
+
+
+# ===============================================
 # ENDPOINTS DE COMPATIBILIDAD (CÓDIGO ANTERIOR)
 # ===============================================
 

@@ -16,6 +16,13 @@ services:
       - AUDIO_VERIFICATION_ENABLED=true
       - AUDIO_VERIFICATION_DAYS=7
       - AUDIO_VERIFICATION_MAX_FILES=100
+      # Remote Backend Configuration
+      - REMOTE_BACKEND_URL=http://192.168.1.88:10002
+      - REMOTE_BACKEND_EMAIL=service@puertocho.local
+      - REMOTE_BACKEND_PASSWORD=servicepass123
+      - REMOTE_BACKEND_TIMEOUT=60.0
+      - REMOTE_BACKEND_RETRY_ATTEMPTS=3
+      - REMOTE_BACKEND_RETRY_DELAY=2.0
     volumes:
       - ./puertocho-assistant-backend/src:/app/src
       - ./puertocho-assistant-backend/audio_verification:/app/audio_verification

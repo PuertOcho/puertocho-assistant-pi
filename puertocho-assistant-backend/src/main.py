@@ -28,6 +28,7 @@ from middleware.logging import LoggingMiddleware, setup_logging
 from core.websocket_manager import websocket_manager
 from core.state_manager import init_state_manager, close_state_manager, get_state_manager
 from clients.hardware_client import init_hardware_client, close_hardware_client, get_hardware_client
+from clients.remote_backend_client import init_remote_client, close_remote_client
 from services.audio_processor import init_audio_processor, close_audio_processor, get_audio_processor
 from api.gateway_endpoints import router as gateway_router
 
@@ -62,7 +63,16 @@ async def lifespan(app: FastAPI):
         state_manager = init_state_manager(websocket_manager)
         await state_manager.start()
         
-        # 3. Inicializar audio processor
+        # 3. Inicializar cliente remoto
+        backend_logger.info("🌐 Initializing remote backend client...")
+        try:
+            remote_client = await init_remote_client()
+            backend_logger.info("✅ Remote backend client initialized!")
+        except Exception as e:
+            backend_logger.warning(f"⚠️ Remote backend client failed to initialize: {e}")
+            backend_logger.warning("Continuing without remote backend connectivity...")
+        
+        # 4. Inicializar audio processor
         backend_logger.info("🎙️ Initializing audio processor...")
         audio_processor = init_audio_processor(websocket_manager)
         await audio_processor.start()
@@ -81,6 +91,7 @@ async def lifespan(app: FastAPI):
         
         try:
             await close_audio_processor()
+            await close_remote_client()
             await close_state_manager()
             await close_hardware_client()
             backend_logger.info("✅ Backend Gateway shutdown complete")
