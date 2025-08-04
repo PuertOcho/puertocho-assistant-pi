@@ -182,38 +182,67 @@
   - ✅ **Token management**: Renovación automática 5 minutos antes de expiración
   - ✅ **Testing endpoint**: `/remote/test-auth` para diagnóstico de autenticación
 
-- [ ] **4.2 Actualizar AudioProcessor para Backend Remoto**
+- [ ] **4.2 Rediseñar IntentManagerMS con LLM-RAG y Arquitectura MoE**
+  - [ ] Diseñar nueva arquitectura basada en LLM + RAG para clasificación de intenciones más eficiente que RASA
+  - [ ] Implementar sistema de Mixture of Experts (MoE) con múltiples LLMs especializados por dominio
+  - [ ] Crear sistema de configuración basado en JSON para definir intenciones, entidades requeridas y acciones MCP
+  - [ ] Implementar motor de RAG con embeddings vectoriales para few-shot learning de intenciones
+  - [ ] Desarrollar sistema conversacional inteligente para slot-filling automático (ej: "¿qué tiempo hace?" → solicita ubicación)
+  - [ ] Integrar soporte directo para MCP (Model Context Protocol) y acciones configurables
+  - [ ] Reemplazar DialogManager actual con sistema basado en LLM que mantenga contexto conversacional
+  - [ ] Implementar fallback inteligente: LLM primario → LLM especializado → acción por defecto
+  - [ ] Añadir soporte para intenciones dinámicas desde JSON sin necesidad de reentrenar modelos
+  - [ ] Crear sistema de confidence scoring mejorado usando múltiples LLMs para validación cruzada
+  - [ ] Integrar con whisper-ms para transcripción directa de audio a texto antes de clasificación
+  - [ ] Desarrollar API compatible con estructura actual pero con capacidades LLM-RAG extendidas
+  - [ ] Implementar sistema de métricas y evaluación para comparar rendimiento vs RASA/DU actual
+  - [ ] Diseñar arquitectura de microservicio independiente manteniendo compatibilidad con gatewayms
+
+- [ ] **4.3 Actualizar AudioProcessor para Backend Remoto**
   - [ ] Modificar `_send_to_remote_backend()` en `audio_processor.py`
   - [ ] Implementar manejo de respuestas por tipo: `audio`, `text`, `action`
   - [ ] Añadir método `_handle_audio_response()` para coordinar reproducción
   - [ ] Integrar con `HardwareClient` para envío de audio a reproductor
   - [ ] Actualizar flujo de WebSocket para notificar respuestas
 
-- [ ] **4.3 Implementar Reproducción en Hardware**
+- [ ] **4.3 Estructura de Datos Escalable para Comunicación Backend Local ↔ Remoto**
+  - [ ] Diseñar protocolo multipart/form-data para comunicación flexible entre puertocho-assistant-backend y backend remoto
+  - [ ] Implementar estructura con campos obligatorios: audio binario (bytes WAV) y metadata con timestamp ISO
+  - [ ] Añadir soporte para campos opcionales: context con ubicación, temperatura, configuración de dispositivo, etc.
+  - [ ] Asegurar escalabilidad: Usar diccionarios JSON que permitan añadir keys futuras sin romper compatibilidad
+  - [ ] Mapear context opcional con DeviceContext de intentmanagerms (location→room, temperature→temperature, etc.)
+  - [ ] Integrar obtención dinámica de context desde hardware status o configuración local
+  - [ ] Actualizar remote_backend_client.py para enviar estructura completa al backend remoto
+  - [ ] Documentar estructura con ejemplos de payload en README.md
+  - [ ] Implementar validación opcional con schemas (Pydantic) para metadata y context
+  - [ ] Añadir variables de entorno para habilitar/deshabilitar envío de datos opcionales (ENABLE_CONTEXT=true)
+
+- [ ] **4.4 Implementar Reproducción en Hardware**
   - [ ] Crear endpoint `/audio/play` en `http_server.py`
   - [ ] Añadir método `play_response_audio()` en `audio_manager.py`
   - [ ] Implementar decodificación de audio Base64 y conversión a numpy
   - [ ] Manejar reproducción con chunks y control de stream
   - [ ] Añadir estado `SPEAKING` al `StateManager`
 
-- [ ] **4.4 Integrar Cliente Hardware en Backend**
+- [ ] **4.5 Integrar Cliente Hardware en Backend**
   - [ ] Añadir método `play_audio_response()` en `hardware_client.py`
   - [ ] Implementar serialización Base64 para envío de audio
   - [ ] Manejar metadata y contexto de respuesta
   - [ ] Coordinar con WebSocket para notificaciones en tiempo real
 
-- [ ] **4.5 Actualizar Variables de Entorno y Configuración**
+- [ ] **4.6 Actualizar Variables de Entorno y Configuración**
   - [ ] Añadir variables `REMOTE_BACKEND_*` al `docker-compose.yml`
   - [ ] Configurar credenciales: URL, usuario, password
   - [ ] Actualizar `main.py` para inicializar cliente remoto
   - [ ] Implementar gestión de ciclo de vida (startup/shutdown)
 
-- [ ] **4.6 Testing de Flujo Completo**
+- [ ] **4.7 Testing de Flujo Completo**
   - [ ] Probar autenticación con Backend Remoto
-  - [ ] Validar envío de audio con metadata
+  - [ ] Validar envío de audio con metadata y context opcionales
   - [ ] Verificar recepción y reproducción de respuestas
   - [ ] Testing de latencia y calidad de audio
   - [ ] Pruebas de recuperación ante errores de red
+  - [ ] Testing de escalabilidad: añadir campos nuevos sin romper compatibilidad
 
 **FLUJO IMPLEMENTADO**:
 1. **Hardware** captura audio → envía a **Backend Local**
