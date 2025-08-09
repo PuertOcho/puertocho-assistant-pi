@@ -23,6 +23,14 @@ services:
       - REMOTE_BACKEND_TIMEOUT=60.0
       - REMOTE_BACKEND_RETRY_ATTEMPTS=3
       - REMOTE_BACKEND_RETRY_DELAY=2.0
+      # Conversation API Configuration (Epic 4.3)
+      - REMOTE_BACKEND_CONVERSATION_PATH=${REMOTE_BACKEND_CONVERSATION_PATH:-/api/v1/conversation/process/audio}
+      - REMOTE_BACKEND_LANGUAGE=${REMOTE_BACKEND_LANGUAGE:-es}
+      - REMOTE_BACKEND_API_MODE=${REMOTE_BACKEND_API_MODE:-conversation}
+      - CONVERSATION_DEFAULT_USER_ID=${CONVERSATION_DEFAULT_USER_ID:-service@puertocho.local}
+      - CONVERSATION_SESSION_ID=${CONVERSATION_SESSION_ID:-}
+      - DEVICE_ID=${DEVICE_ID:-puertocho-rpi-01}
+      - CONVERSATION_SESSION_STRATEGY=${CONVERSATION_SESSION_STRATEGY:-sticky-per-device}
     volumes:
       - ./puertocho-assistant-backend/src:/app/src
       - ./puertocho-assistant-backend/audio_verification:/app/audio_verification

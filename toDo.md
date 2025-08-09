@@ -182,21 +182,8 @@
   - ✅ **Token management**: Renovación automática 5 minutos antes de expiración
   - ✅ **Testing endpoint**: `/remote/test-auth` para diagnóstico de autenticación
 
-- [ ] **4.2 Rediseñar IntentManagerMS con LLM-RAG y Arquitectura MoE**
-  - [ ] Diseñar nueva arquitectura basada en LLM + RAG para clasificación de intenciones más eficiente que RASA
-  - [ ] Implementar sistema de Mixture of Experts (MoE) con múltiples LLMs especializados por dominio
-  - [ ] Crear sistema de configuración basado en JSON para definir intenciones, entidades requeridas y acciones MCP
-  - [ ] Implementar motor de RAG con embeddings vectoriales para few-shot learning de intenciones
-  - [ ] Desarrollar sistema conversacional inteligente para slot-filling automático (ej: "¿qué tiempo hace?" → solicita ubicación)
-  - [ ] Integrar soporte directo para MCP (Model Context Protocol) y acciones configurables
-  - [ ] Reemplazar DialogManager actual con sistema basado en LLM que mantenga contexto conversacional
-  - [ ] Implementar fallback inteligente: LLM primario → LLM especializado → acción por defecto
-  - [ ] Añadir soporte para intenciones dinámicas desde JSON sin necesidad de reentrenar modelos
-  - [ ] Crear sistema de confidence scoring mejorado usando múltiples LLMs para validación cruzada
-  - [ ] Integrar con whisper-ms para transcripción directa de audio a texto antes de clasificación
-  - [ ] Desarrollar API compatible con estructura actual pero con capacidades LLM-RAG extendidas
-  - [ ] Implementar sistema de métricas y evaluación para comparar rendimiento vs RASA/DU actual
-  - [ ] Diseñar arquitectura de microservicio independiente manteniendo compatibilidad con gatewayms
+- [x] **4.2 Rediseñar IntentManagerMS con LLM-RAG y Arquitectura MoE**
+  - *Objetivo*: Implementación completamente nueva de intentmanagerms usando arquitectura LLM-RAG + Mixture of Experts (MoE) para clasificación de intenciones escalable, conversación multivuelta inteligente y soporte nativo MCP.
 
 - [ ] **4.3 Actualizar AudioProcessor para Backend Remoto**
   - [ ] Modificar `_send_to_remote_backend()` en `audio_processor.py`
