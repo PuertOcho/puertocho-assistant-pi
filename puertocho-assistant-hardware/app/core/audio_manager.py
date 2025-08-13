@@ -44,9 +44,13 @@ class AudioManager:
         self.buffer_size = config.audio.buffer_size
         self.device_name = config.audio.device_name
         
-        # Si no se especifica un dispositivo, buscar por nombre
+        # Si no se especifica un dispositivo, buscar por nombre o usar índice configurado
         if input_device_index is None:
-            input_device_index = self._find_device_by_name(self.device_name)
+            if config.audio.device_index is not None:
+                input_device_index = config.audio.device_index
+                logger.info(f"Usando índice de dispositivo configurado: {input_device_index}")
+            else:
+                input_device_index = self._find_device_by_name(self.device_name)
         
         self.input_device_index = input_device_index
         self.stream = None
@@ -55,7 +59,26 @@ class AudioManager:
         # Buffer circular continuo (3 segundos por defecto)
         self.continuous_buffer_duration = 3.0
         
-        # Inicializar buffers según configuración
+        # Inicializar atributos básicos antes de validación
+        self.dynamic_audio_chunks: List[np.ndarray] = []
+        self.is_capturing_voice = False
+        self.capture_start_time = None
+        self.external_callback: Optional[Callable] = None
+        self.last_level_calculation = 0
+        self.current_audio_level = 0.0
+        
+        # Inicializar estadísticas de rendimiento
+        self.performance_stats = {
+            'total_callbacks': 0,
+            'overflow_count': 0,
+            'last_stats_log': time.time(),
+            'callback_times': []
+        }
+        
+        # Validar y ajustar configuración antes de crear buffers
+        self._validate_device()
+        
+        # Inicializar buffers según configuración validada
         if self.channels == 2:
             self.continuous_buffer = DualChannelBuffer(
                 self.continuous_buffer_duration, 
@@ -68,26 +91,23 @@ class AudioManager:
                 self.channels
             )
         
-        # Buffer dinámico para captura de voz completa
-        self.dynamic_audio_chunks: List[np.ndarray] = []
-        self.is_capturing_voice = False
-        self.capture_start_time = None
-        
-        # Callback externo para retrocompatibilidad
-        self.external_callback: Optional[Callable] = None
-        
-        # Métricas de rendimiento
-        self.last_level_calculation = 0
-        self.current_audio_level = 0.0
-
-        self._validate_device()
-        
         log_audio_event("audio_manager_initialized", {
             "sample_rate": self.sample_rate,
             "channels": self.channels,
             "buffer_duration": self.continuous_buffer_duration,
-            "buffer_type": "DualChannelBuffer" if self.channels == 2 else "CircularAudioBuffer"
+            "buffer_type": "DualChannelBuffer" if self.channels == 2 else "CircularAudioBuffer",
+            "config": {
+                "chunk_size": self.chunk_size,
+                "buffer_size": self.buffer_size,
+                "device_name": self.device_name,
+                "device_index": self.input_device_index,
+                "theoretical_latency_ms": (self.chunk_size / self.sample_rate) * 1000
+            }
         })
+        
+        # Log configuración inicial para optimización
+        logger.info(f"🎵 AudioManager configurado: {self.sample_rate}Hz, {self.channels}ch, "
+                   f"chunk={self.chunk_size} (latencia teórica: {(self.chunk_size / self.sample_rate) * 1000:.1f}ms)")
 
     def _find_device_by_name(self, device_name: str) -> Optional[int]:
         """
@@ -101,9 +121,43 @@ class AudioManager:
         """
         try:
             devices = sd.query_devices()
+            
+            # Prioridad de búsqueda para dispositivos conocidos
+            priority_devices = [
+                "array",      # ReSpeaker device - tiene 2 canales
+                "seeed",
+                "capture_in", 
+                "duplex",
+                "pulse",
+                "default"
+            ]
+            
+            # Primero buscar dispositivos con entrada disponible
+            input_devices = [d for i, d in enumerate(devices) if d['max_input_channels'] > 0]
+            
+            logger.info(f"Dispositivos de entrada disponibles: {len(input_devices)}")
+            for i, device in enumerate(devices):
+                if device['max_input_channels'] > 0:
+                    logger.info(f"  {i}: {device['name']} (canales: {device['max_input_channels']})")
+            
+            # Buscar por prioridad
+            for priority_name in priority_devices:
+                for i, device in enumerate(devices):
+                    if (priority_name.lower() in device['name'].lower() and 
+                        device['max_input_channels'] > 0):
+                        logger.info(f"Dispositivo encontrado por prioridad: {device['name']} (índice: {i})")
+                        return i
+            
+            # Si no encuentra ninguno por prioridad, buscar el solicitado
             for i, device in enumerate(devices):
                 if device_name.lower() in device['name'].lower() and device['max_input_channels'] > 0:
                     logger.info(f"Dispositivo encontrado: {device['name']} (índice: {i})")
+                    return i
+            
+            # Si no encuentra nada, usar el primer dispositivo con entrada
+            for i, device in enumerate(devices):
+                if device['max_input_channels'] > 0:
+                    logger.warning(f"Usando primer dispositivo de entrada disponible: {device['name']} (índice: {i})")
                     return i
             
             logger.warning(f"Dispositivo '{device_name}' no encontrado, usando dispositivo por defecto")
@@ -116,15 +170,99 @@ class AudioManager:
         """
         Valida que el dispositivo de entrada seleccionado es válido.
         """
+        original_channels = self.channels
+        original_sample_rate = self.sample_rate
+        
+        # Lista de dispositivos para probar en orden de prioridad
+        devices_to_try = []
+        
+        if self.input_device_index is not None:
+            devices_to_try.append(self.input_device_index)
+        
+        # Agregar dispositivos de prioridad detectados
         try:
-            if self.input_device_index is not None:
-                sd.check_input_settings(device=self.input_device_index, channels=self.channels, samplerate=self.sample_rate)
-            else:
-                sd.check_input_settings(channels=self.channels, samplerate=self.sample_rate)
-            logger.info(f"Dispositivo de audio de entrada validado correctamente (Índice: {self.input_device_index}).")
-        except sd.PortAudioError as e:
-            logger.error(f"Error al validar el dispositivo de audio: {e}")
-            raise
+            devices = sd.query_devices()
+            priority_devices = ["array", "seeed", "capture_in", "duplex", "pulse", "default"]
+            
+            for priority_name in priority_devices:
+                for i, device in enumerate(devices):
+                    if (priority_name.lower() in device['name'].lower() and 
+                        device['max_input_channels'] > 0 and 
+                        i not in devices_to_try):
+                        devices_to_try.append(i)
+                        logger.info(f"Agregando dispositivo de prioridad para probar: {device['name']} (índice: {i})")
+        except Exception as e:
+            logger.warning(f"Error al obtener lista de dispositivos: {e}")
+        
+        # Probar dispositivos en orden
+        for device_index in devices_to_try:
+            try:
+                logger.info(f"Probando dispositivo índice {device_index}...")
+                sd.check_input_settings(
+                    device=device_index, 
+                    channels=self.channels, 
+                    samplerate=self.sample_rate
+                )
+                self.input_device_index = device_index
+                logger.info(f"Dispositivo {device_index} validado correctamente con {self.channels}ch@{self.sample_rate}Hz")
+                return  # Éxito - salir
+            except sd.PortAudioError as e:
+                logger.warning(f"Dispositivo índice {device_index} falló: {e}")
+                continue
+        
+        # Si ningún dispositivo funcionó con la configuración original, probar configuración reducida
+        logger.error("Ningún dispositivo funcionó con configuración original")
+        logger.info("Intentando con configuración reducida (mono, 16kHz)...")
+        
+        for device_index in devices_to_try:
+            try:
+                logger.info(f"Probando dispositivo {device_index} con configuración reducida...")
+                sd.check_input_settings(device=device_index, channels=1, samplerate=16000)
+                self.input_device_index = device_index
+                logger.warning("Solo configuración básica disponible - ajustando parámetros")
+                self.channels = 1
+                self.sample_rate = 16000
+                break
+            except sd.PortAudioError as e:
+                logger.warning(f"Dispositivo {device_index} falló incluso con configuración reducida: {e}")
+                continue
+        else:
+            # Si llegamos aquí, nada funcionó
+            logger.error("Ningún dispositivo funcionó, ni siquiera con configuración básica")
+            raise Exception("No se pudo encontrar un dispositivo de audio válido")
+        
+        # Si los parámetros cambiaron, necesitamos recrear los buffers
+        if (self.channels != original_channels or 
+            self.sample_rate != original_sample_rate):
+            logger.info(f"Recreando buffers: {original_channels}ch@{original_sample_rate}Hz -> {self.channels}ch@{self.sample_rate}Hz")
+            self._recreate_buffers()
+    
+    def _recreate_buffers(self):
+        """
+        Recrea los buffers cuando cambia la configuración de audio.
+        """
+        # Inicializar buffers según configuración actualizada
+        if self.channels == 2:
+            self.continuous_buffer = DualChannelBuffer(
+                self.continuous_buffer_duration, 
+                self.sample_rate
+            )
+        else:
+            self.continuous_buffer = CircularAudioBuffer(
+                self.continuous_buffer_duration,
+                self.sample_rate,
+                self.channels
+            )
+        
+        # Limpiar buffer dinámico también
+        self.dynamic_audio_chunks.clear()
+        self.is_capturing_voice = False
+        
+        log_audio_event("buffers_recreated", {
+            "sample_rate": self.sample_rate,
+            "channels": self.channels,
+            "buffer_type": "DualChannelBuffer" if self.channels == 2 else "CircularAudioBuffer"
+        })
 
     @staticmethod
     def list_audio_devices() -> Dict[str, Any]:
@@ -164,20 +302,29 @@ class AudioManager:
         self.external_callback = callback
 
         try:
+            # Calcular latencia basada en chunk_size
+            latency_ms = (self.chunk_size / self.sample_rate) * 1000
+            
             self.stream = sd.InputStream(
                 samplerate=self.sample_rate,
                 device=self.input_device_index,
                 channels=self.channels,
                 blocksize=self.chunk_size,
-                callback=self._internal_audio_callback
+                callback=self._internal_audio_callback,
+                latency='low'  # Solicitar baja latencia
             )
             self.stream.start()
             self.is_recording = True
-            logger.info("Grabación iniciada.")
+            
+            # Log información detallada para optimización
+            logger.info(f"Grabación iniciada - Latencia teórica: {latency_ms:.1f}ms")
             log_audio_event("recording_started", {
                 "sample_rate": self.sample_rate,
                 "channels": self.channels,
-                "chunk_size": self.chunk_size
+                "chunk_size": self.chunk_size,
+                "buffer_size": self.buffer_size,
+                "theoretical_latency_ms": latency_ms,
+                "device_index": self.input_device_index
             })
         except Exception as e:
             logger.error(f"Error al iniciar la grabación: {e}")
@@ -186,6 +333,7 @@ class AudioManager:
     def _internal_audio_callback(self, indata: np.ndarray, frames: int, time_info, status):
         """
         Callback interno que maneja buffers y llama al callback externo.
+        Optimizado para mínima latencia.
         
         Args:
             indata: Datos de audio de entrada
@@ -193,28 +341,57 @@ class AudioManager:
             time_info: Información temporal
             status: Estado del stream
         """
+        callback_start = time.time()
+        
+        # Actualizar estadísticas
+        self.performance_stats['total_callbacks'] += 1
+        
         if status:
-            logger.warning(f"Estado del stream de audio: {status}")
+            self.performance_stats['overflow_count'] += 1
+            
+            # Log detallado cada 100 overflows para diagnóstico
+            if self.performance_stats['overflow_count'] % 100 == 0:
+                current_latency = (frames / self.sample_rate) * 1000
+                logger.warning(f"Estado del stream de audio: {status} (#{self.performance_stats['overflow_count']}) - "
+                             f"Latencia actual: {current_latency:.1f}ms, "
+                             f"Frames: {frames}, Chunk: {self.chunk_size}")
         
-        # Convertir a float32 para consistencia
-        audio_data = indata.astype(np.float32)
+        # Optimización: copiar datos una sola vez
+        audio_data = indata.astype(np.float32, copy=False)
         
-        # Escribir al buffer circular continuo
-        if self.channels == 2:
-            self.continuous_buffer.write_stereo(audio_data)
-        else:
-            self.continuous_buffer.write(audio_data.flatten())
+        # Escribir al buffer circular continuo - operación crítica
+        try:
+            if self.channels == 2:
+                self.continuous_buffer.write_stereo(audio_data)
+            else:
+                self.continuous_buffer.write(audio_data.flatten())
+        except Exception:
+            pass  # Silenciar errores para no bloquear el callback
         
-        # Si estamos capturando voz dinámicamente, añadir al buffer dinámico
+        # Si estamos capturando voz dinámicamente - operación rápida
         if self.is_capturing_voice:
             self.dynamic_audio_chunks.append(audio_data.copy())
         
-        # Calcular nivel de audio para monitoreo
-        self._update_audio_level(audio_data)
-        
         # Llamar al callback externo para retrocompatibilidad
         if self.external_callback:
-            self.external_callback(indata, frames, status)
+            try:
+                self.external_callback(indata, frames, status)
+            except Exception:
+                pass  # No permitir que errores del callback externo bloqueen el audio
+        
+        # Registrar tiempo de callback y estadísticas periódicas
+        callback_duration = time.time() - callback_start
+        self.performance_stats['callback_times'].append(callback_duration)
+        
+        # Mantener solo las últimas 1000 mediciones
+        if len(self.performance_stats['callback_times']) > 1000:
+            self.performance_stats['callback_times'] = self.performance_stats['callback_times'][-1000:]
+        
+        # Log estadísticas cada 30 segundos
+        current_time = time.time()
+        if current_time - self.performance_stats['last_stats_log'] > 30.0:
+            self._log_performance_stats()
+            self.performance_stats['last_stats_log'] = current_time
     
     def _update_audio_level(self, audio_data: np.ndarray):
         """
@@ -388,6 +565,140 @@ class AudioManager:
         """
         return min(1.0, self.current_audio_level * 10)  # Escalar para mejor visualización
     
+    def _log_performance_stats(self):
+        """
+        Registra estadísticas de rendimiento del audio para optimización.
+        """
+        if not self.performance_stats['callback_times']:
+            return
+        
+        # Calcular estadísticas de tiempo de callback
+        callback_times = self.performance_stats['callback_times']
+        avg_callback_time = np.mean(callback_times) * 1000  # en ms
+        max_callback_time = np.max(callback_times) * 1000   # en ms
+        min_callback_time = np.min(callback_times) * 1000   # en ms
+        p95_callback_time = np.percentile(callback_times, 95) * 1000  # en ms
+        
+        # Calcular tasa de overflow
+        total_callbacks = self.performance_stats['total_callbacks']
+        overflow_rate = (self.performance_stats['overflow_count'] / total_callbacks * 100) if total_callbacks > 0 else 0
+        
+        # Latencia teórica vs real
+        theoretical_latency = (self.chunk_size / self.sample_rate) * 1000
+        
+        # Estadísticas del buffer
+        buffer_stats = {}
+        if hasattr(self, 'continuous_buffer'):
+            try:
+                if hasattr(self.continuous_buffer, 'get_buffer_fill_percentage'):
+                    buffer_stats['buffer_fill_pct'] = self.continuous_buffer.get_buffer_fill_percentage()
+                if hasattr(self.continuous_buffer, 'buffer_size'):
+                    buffer_stats['buffer_size'] = getattr(self.continuous_buffer, 'buffer_size', 'unknown')
+            except Exception:
+                pass
+        
+        log_audio_event("audio_performance_stats", {
+            "config": {
+                "sample_rate": self.sample_rate,
+                "channels": self.channels,
+                "chunk_size": self.chunk_size,
+                "buffer_size": self.buffer_size,
+                "theoretical_latency_ms": round(theoretical_latency, 2)
+            },
+            "performance": {
+                "total_callbacks": total_callbacks,
+                "overflow_count": self.performance_stats['overflow_count'],
+                "overflow_rate_pct": round(overflow_rate, 2),
+                "avg_callback_time_ms": round(avg_callback_time, 3),
+                "max_callback_time_ms": round(max_callback_time, 3),
+                "min_callback_time_ms": round(min_callback_time, 3),
+                "p95_callback_time_ms": round(p95_callback_time, 3)
+            },
+            "buffer_stats": buffer_stats,
+            "recommendations": self._get_optimization_recommendations(overflow_rate, avg_callback_time, theoretical_latency)
+        })
+        
+        # Reset parcial de estadísticas para la siguiente ventana
+        self.performance_stats['callback_times'] = []
+
+    def _get_optimization_recommendations(self, overflow_rate: float, avg_callback_time: float, theoretical_latency: float) -> List[str]:
+        """
+        Genera recomendaciones de optimización basadas en las estadísticas.
+        
+        Args:
+            overflow_rate: Porcentaje de overflows
+            avg_callback_time: Tiempo promedio de callback en ms
+            theoretical_latency: Latencia teórica en ms
+            
+        Returns:
+            Lista de recomendaciones
+        """
+        recommendations = []
+        
+        # Recomendaciones basadas en overflow rate
+        if overflow_rate > 5.0:
+            recommendations.append("🔴 Alto rate de overflow (>5%) - Considerar aumentar AUDIO_CHUNK_SIZE")
+            
+            if self.chunk_size < 2048:
+                recommendations.append(f"📈 Probar AUDIO_CHUNK_SIZE={self.chunk_size * 2} (latencia: {(self.chunk_size * 2 / self.sample_rate) * 1000:.1f}ms)")
+            
+            if theoretical_latency < 50:
+                recommendations.append("⚡ Latencia muy baja, considerar balance latencia/estabilidad")
+        
+        elif overflow_rate > 1.0:
+            recommendations.append("🟡 Overflow rate moderado (1-5%) - Monitorear")
+        
+        elif overflow_rate < 0.1:
+            recommendations.append("🟢 Overflow rate excelente (<0.1%)")
+            
+            if theoretical_latency > 100:
+                recommendations.append(f"📉 Latencia alta, considerar AUDIO_CHUNK_SIZE={max(512, self.chunk_size // 2)}")
+        
+        # Recomendaciones basadas en tiempo de callback
+        if avg_callback_time > theoretical_latency * 0.8:
+            recommendations.append("⚠️ Tiempo de callback alto vs latencia teórica - Optimizar procesamiento")
+        
+        # Recomendaciones específicas para 48kHz
+        if self.sample_rate == 48000:
+            if self.chunk_size < 1024:
+                recommendations.append("🎵 Para 48kHz considerar AUDIO_CHUNK_SIZE >= 1024")
+            elif overflow_rate > 3.0 and self.chunk_size < 2048:
+                recommendations.append("🎵 Para 48kHz con overflows, probar AUDIO_CHUNK_SIZE=2048")
+        
+        return recommendations
+
+    def get_audio_stats(self) -> Dict[str, Any]:
+        """
+        Obtiene estadísticas detalladas del audio para optimización.
+        
+        Returns:
+            Dict con estadísticas del audio
+        """
+        stats = {
+            "sample_rate": self.sample_rate,
+            "channels": self.channels,
+            "chunk_size": self.chunk_size,
+            "buffer_size": self.buffer_size,
+            "theoretical_latency_ms": (self.chunk_size / self.sample_rate) * 1000,
+            "is_recording": self.is_recording,
+            "overflow_count": getattr(self, '_overflow_count', 0),
+            "device_index": self.input_device_index,
+            "device_name": self.device_name
+        }
+        
+        if hasattr(self, 'stream') and self.stream:
+            try:
+                # Obtener información del stream actual
+                stats.update({
+                    "stream_active": self.stream.active,
+                    "stream_stopped": self.stream.stopped,
+                    "actual_latency": self.stream.latency
+                })
+            except Exception:
+                pass
+        
+        return stats
+
     def get_buffer_stats(self) -> Dict[str, Any]:
         """
         Obtiene estadísticas de los buffers de audio.

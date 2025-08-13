@@ -16,6 +16,7 @@ load_dotenv()
 class AudioConfig:
     """Configuración de audio"""
     device_name: str = os.getenv("AUDIO_DEVICE_NAME", "seeed-voicecard")
+    device_index: Optional[int] = int(os.getenv("AUDIO_DEVICE_INDEX")) if os.getenv("AUDIO_DEVICE_INDEX") else None
     sample_rate: int = int(os.getenv("AUDIO_SAMPLE_RATE", "44100"))
     channels: int = int(os.getenv("AUDIO_CHANNELS", "2"))
     chunk_size: int = int(os.getenv("AUDIO_CHUNK_SIZE", "1024"))

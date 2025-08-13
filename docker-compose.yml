@@ -94,17 +94,22 @@ services:
       - HARDWARE_LOG_LEVEL=INFO
       - BACKEND_URL=http://localhost:8000
       - BACKEND_WS_URL=ws://localhost:8000/ws
+      - PULSE_RUNTIME_PATH=/run/user/1000/pulse
       - PULSE_SERVER=unix:/run/user/1000/pulse/native
+      - PULSE_COOKIE=/home/puertocho/.config/pulse/cookie
+      - ALSA_CARD=3
     volumes:
       - /dev:/dev
       - /sys:/sys
       - /proc:/proc
       - /var/run/dbus:/var/run/dbus
       - /run/user/1000/pulse:/run/user/1000/pulse
+      - /home/puertocho/.config/pulse:/home/puertocho/.config/pulse:ro
       - /usr/share/alsa:/usr/share/alsa:ro
       - /etc/asound.conf:/etc/asound.conf:ro
       - /lib/modules:/lib/modules:ro
       - /etc/modprobe.d:/etc/modprobe.d:ro
+      - /var/lib/alsa:/var/lib/alsa:ro
       - puertocho-logs:/app/logs
       - puertocho-config:/app/config
       - ./puertocho-assistant-hardware/app/captured_audio:/app/captured_audio
