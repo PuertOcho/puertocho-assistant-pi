@@ -810,28 +810,70 @@ class AudioManager:
             duration = len(audio_float) / sample_rate
             logger.info(f"🎵 Playing audio: {duration:.2f}s @ {sample_rate}Hz, volume: {self.audio_volume_percent}%")
             
-            # Reproducir usando sounddevice con dispositivo configurado
-            try:
-                # Usar dispositivo por índice (sounddevice funciona mejor con índices)
-                sd.play(audio_float, samplerate=sample_rate, device=self.output_device_index)
-                sd.wait()  # Esperar a que termine
-                logger.info(f"✅ Audio playback completed on device {self.output_device_index}")
-                return True
-            except Exception as sd_error:
-                logger.error(f"❌ Sounddevice playback failed on device {self.output_device_index}: {sd_error}")
-                
-                # Fallback: probar con dispositivo por defecto
-                try:
-                    sd.play(audio_float, samplerate=sample_rate)  # Sin especificar device
-                    sd.wait()
-                    logger.info(f"✅ Audio playback completed on default device")
-                    return True
-                except Exception as fallback_error:
-                    logger.error(f"❌ Default device playback also failed: {fallback_error}")
-                    return False
+            # Reproducir usando aplay directamente (más confiable que sounddevice)
+            return self._play_audio_with_aplay(audio_float, sample_rate)
             
         except Exception as e:
             logger.error(f"❌ Error playing audio: {e}")
+            return False
+    
+    def _play_audio_with_aplay(self, audio_data: np.ndarray, sample_rate: int) -> bool:
+        """
+        Reproduce audio usando aplay directamente con el dispositivo hw:0,0.
+        
+        Args:
+            audio_data: Datos de audio como array numpy float32
+            sample_rate: Tasa de muestreo
+            
+        Returns:
+            bool: True si la reproducción fue exitosa
+        """
+        try:
+            import subprocess
+            import tempfile
+            import wave
+            
+            # Convertir float32 a int16 para wav
+            if audio_data.dtype == np.float32:
+                audio_int16 = (audio_data * 32767).astype(np.int16)
+            else:
+                audio_int16 = audio_data.astype(np.int16)
+            
+            # Crear archivo temporal WAV
+            with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as temp_file:
+                temp_path = temp_file.name
+                
+                # Escribir archivo WAV
+                with wave.open(temp_path, 'wb') as wav_file:
+                    wav_file.setnchannels(1)  # Mono
+                    wav_file.setsampwidth(2)  # 16-bit
+                    wav_file.setframerate(sample_rate)
+                    wav_file.writeframes(audio_int16.tobytes())
+                
+                # Reproducir con aplay
+                logger.info(f"🎵 Playing audio with aplay: {self.aplay_device}")
+                result = subprocess.run(
+                    ['aplay', '-D', self.aplay_device, temp_path],
+                    capture_output=True,
+                    text=True,
+                    timeout=30
+                )
+                
+                # Limpiar archivo temporal
+                try:
+                    os.unlink(temp_path)
+                except:
+                    pass
+                
+                if result.returncode == 0:
+                    logger.info(f"✅ Audio playback completed with aplay on {self.aplay_device}")
+                    return True
+                else:
+                    logger.error(f"❌ aplay failed: {result.stderr}")
+                    return False
+                    
+        except Exception as e:
+            logger.error(f"❌ Error playing audio with aplay: {e}")
             return False
     
     def set_volume(self, volume_percent: float) -> bool:

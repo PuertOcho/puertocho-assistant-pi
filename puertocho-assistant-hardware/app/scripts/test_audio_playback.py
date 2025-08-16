@@ -209,9 +209,9 @@ def check_logs():
     print("\n6️⃣ Verificando logs recientes...")
     
     try:
-        # Ejecutar docker-compose logs
+        # Ejecutar docker compose logs
         result = subprocess.run(
-            ["docker-compose", "logs", "--tail=20", "hardware"],
+            ["docker", "compose", "logs", "--tail=20", "hardware"],
             capture_output=True,
             text=True,
             cwd=Path(__file__).parent.parent.parent.parent
@@ -244,7 +244,7 @@ def check_logs():
             
             return True
         else:
-            print(f"❌ Error ejecutando docker-compose logs: {result.stderr}")
+            print(f"❌ Error ejecutando docker compose logs: {result.stderr}")
             return False
             
     except Exception as e:
@@ -261,9 +261,9 @@ def test_volume_control():
         if response.status_code == 200:
             current_volume = response.json()
             print(f"Volumen actual: {current_volume}")
-        
-        # Cambiar volumen a 50%
-        new_volume = {"volume_percent": 50.0}
+
+        # Cambiar volumen a 90%
+        new_volume = {"volume_percent": 90.0}
         response = requests.post(
             "http://localhost:8080/audio/volume",
             json=new_volume,
@@ -273,7 +273,7 @@ def test_volume_control():
         if response.status_code == 200:
             result = response.json()
             if result.get('success'):
-                print(f"✅ Volumen cambiado a 50%")
+                print(f"✅ Volumen cambiado a 90%")
                 print(f"   Detalles: {result.get('volume', {})}")
                 return True
             else:
@@ -332,7 +332,7 @@ def main():
         print("❌ Todas las pruebas fallaron. Verificar configuración del sistema.")
     
     print("\n💡 Para debugging adicional:")
-    print("   - docker-compose logs -f hardware")
+    print("   - docker compose logs -f hardware")
     print("   - docker exec -it puertocho-hardware bash")
     print("   - python3 -c 'import sounddevice; sounddevice.query_devices()'")
 
