@@ -63,7 +63,7 @@ async def lifespan(app: FastAPI):
         state_manager = init_state_manager(websocket_manager)
         await state_manager.start()
         
-        # 3. Inicializar cliente remoto
+        # 3. Inicializar cliente remoto (Epic 4)
         backend_logger.info("🌐 Initializing remote backend client...")
         try:
             remote_client = await init_remote_client()
@@ -72,10 +72,11 @@ async def lifespan(app: FastAPI):
             backend_logger.warning(f"⚠️ Remote backend client failed to initialize: {e}")
             backend_logger.warning("Continuing without remote backend connectivity...")
         
-        # 4. Inicializar audio processor
+        # 4. Inicializar audio processor (Epic 4)
         backend_logger.info("🎙️ Initializing audio processor...")
         audio_processor = init_audio_processor(websocket_manager)
         await audio_processor.start()
+        backend_logger.info("🎙️ Audio processor configured for remote backend processing")
         
         backend_logger.info("✅ Backend Gateway startup complete!")
         

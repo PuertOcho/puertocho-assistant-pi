@@ -13,6 +13,8 @@ from datetime import datetime
 from pathlib import Path
 import tempfile
 import os
+import json
+import base64
 
 from clients.hardware_client import get_hardware_client
 
@@ -57,9 +59,17 @@ class AudioProcessor:
             self.logger.info(f"🔍 Audio verification enabled: {self.verification_dir}")
             self.logger.info(f"📅 Retention: {self.verification_days} days, max {self.verification_max_files} files")
         
+        # Config conversación (Epic4)
+        self.default_language = os.getenv("REMOTE_BACKEND_LANGUAGE", "es")
+        self.default_user_id = os.getenv("CONVERSATION_DEFAULT_USER_ID", os.getenv("REMOTE_BACKEND_EMAIL", "service@puertocho.local"))
+        self.session_strategy = os.getenv("CONVERSATION_SESSION_STRATEGY", "sticky-per-device")
+        self.forced_session_id = os.getenv("CONVERSATION_SESSION_ID")
+        self.device_id = os.getenv("DEVICE_ID")
+        
         # Tasks
         self._processing_task: Optional[asyncio.Task] = None
         self._cleanup_task: Optional[asyncio.Task] = None
+        self._remote_monitor_task: Optional[asyncio.Task] = None
         self._running = False
     
     async def start(self):
@@ -74,6 +84,9 @@ class AudioProcessor:
             await self._cleanup_old_verification_files()
             # Iniciar tarea de limpieza periódica (cada hora)
             self._cleanup_task = asyncio.create_task(self._periodic_cleanup())
+        
+        # Iniciar monitor de disponibilidad del backend remoto
+        self._remote_monitor_task = asyncio.create_task(self._monitor_remote_availability())
         
         self.logger.info("✅ Audio Processor started")
     
@@ -94,6 +107,13 @@ class AudioProcessor:
             self._cleanup_task.cancel()
             try:
                 await self._cleanup_task
+            except asyncio.CancelledError:
+                pass
+        
+        if self._remote_monitor_task:
+            self._remote_monitor_task.cancel()
+            try:
+                await self._remote_monitor_task
             except asyncio.CancelledError:
                 pass
         
@@ -510,46 +530,181 @@ class AudioProcessor:
     
     async def _send_to_remote_backend(self, entry: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Enviar audio al backend remoto para procesamiento.
-        
-        Por ahora es un placeholder - en el futuro se implementará
-        la comunicación real con el backend remoto.
+        Enviar audio al backend remoto para procesamiento conversacional.
         """
         try:
-            # TODO: Implementar cliente para backend remoto
-            self.logger.info(f"📡 Sending to remote backend: {entry['id']}")
+            # Importar el cliente remoto
+            from clients.remote_backend_client import get_remote_client
             
-            # Simular procesamiento remoto
-            await asyncio.sleep(2.0)
+            entry_id = entry.get('id', 'unknown')
+            self.logger.info(f"📡 Sending audio {entry_id} to remote backend...")
             
-            # Respuesta simulada
-            simulated_response = {
-                "success": True,
-                "transcription": "Comando simulado desde audio",
-                "intent": "unknown",
-                "confidence": 0.85,
-                "processing_time_ms": 2000
-            }
+            # Obtener cliente remoto
+            remote_client = get_remote_client()
             
-            self.logger.info(f"✅ Remote backend response: {simulated_response}")
+            # Leer datos de audio
+            audio_file_path = entry.get('temp_file_path')
+            if not audio_file_path or not os.path.exists(audio_file_path):
+                raise ValueError(f"Audio file not found: {audio_file_path}")
             
-            # Notificar respuesta al frontend
-            if self.websocket_manager:
-                await self.websocket_manager.broadcast_remote_response({
-                    "audio_id": entry["id"],
-                    "transcription": simulated_response["transcription"],
-                    "intent": simulated_response["intent"],
-                    "confidence": simulated_response["confidence"]
-                })
+            with open(audio_file_path, 'rb') as f:
+                audio_data = f.read()
             
-            return simulated_response
+            # Preparar parámetros conversacionales
+            session_id = self._resolve_session_id()
+            user_id = self.default_user_id
+            language = self.default_language
+            metadata = entry.get('metadata', {})
             
+            self.logger.info(f"�️ Conversation params - Session: {session_id}, User: {user_id}, Lang: {language}")
+            
+            # Enviar al backend remoto
+            response = await remote_client.send_audio_for_conversation(
+                audio_data=audio_data,
+                session_id=session_id,
+                user_id=user_id,
+                language=language,
+                metadata_json=json.dumps(metadata),
+                generate_audio_response=True
+            )
+            
+            if response.get("success"):
+                self.logger.info(f"✅ Remote backend processed audio {entry_id}")
+                
+                # Log de respuesta
+                if response.get("text"):
+                    self.logger.info(f"📝 Transcription: {response['text'][:100]}...")
+                
+                # Procesar respuesta de audio si existe
+                audio_response_data = None
+                if response.get("audioResponse"):
+                    try:
+                        audio_response_data = base64.b64decode(response["audioResponse"])
+                        self.logger.info(f"🔊 Audio response received: {len(audio_response_data)} bytes")
+                        
+                        # Enviar audio al hardware para reproducción
+                        await self._send_audio_to_hardware(audio_response_data)
+                        
+                    except Exception as e:
+                        self.logger.error(f"❌ Error processing audio response: {e}")
+                
+                # Notificar respuesta al frontend
+                if self.websocket_manager:
+                    await self.websocket_manager.broadcast_remote_response({
+                        "audio_id": entry_id,
+                        "transcription": response.get("text", ""),
+                        "intent": response.get("intent", "unknown"),
+                        "confidence": response.get("confidence", 0.0),
+                        "has_audio_response": bool(audio_response_data),
+                        "response_duration": response.get("audioDuration", 0.0)
+                    })
+                
+                return {
+                    "success": True,
+                    "transcription": response.get("text", ""),
+                    "intent": response.get("intent", "unknown"),
+                    "confidence": response.get("confidence", 0.0),
+                    "has_audio_response": bool(audio_response_data),
+                    "processing_time_ms": response.get("processingTime", 0)
+                }
+            else:
+                error_msg = response.get("error", "Unknown remote backend error")
+                self.logger.error(f"❌ Remote backend failed for {entry_id}: {error_msg}")
+                return {
+                    "success": False,
+                    "error": error_msg
+                }
+                
         except Exception as e:
-            self.logger.error(f"❌ Failed to send to remote backend: {e}")
+            self.logger.error(f"❌ Failed to send audio {entry.get('id', 'unknown')} to remote backend: {e}")
             return {
                 "success": False,
                 "error": str(e)
             }
+    
+    def _resolve_session_id(self) -> str:
+        """Resolver sessionId según estrategia sticky-per-device"""
+        if self.forced_session_id:
+            return self.forced_session_id
+        if self.device_id:
+            return f"device-{self.device_id}"
+        return f"device-{self._get_hostname()}"
+    
+    def _get_hostname(self) -> str:
+        try:
+            import socket
+            return socket.gethostname()
+        except Exception:
+            return "unknown"
+    
+    async def _send_audio_to_hardware(self, audio_data: bytes):
+        """
+        Enviar audio al hardware para reproducción.
+        """
+        try:
+            hardware_client = get_hardware_client()
+            
+            # Codificar audio en base64 para envío
+            audio_b64 = base64.b64encode(audio_data).decode()
+            
+            # Enviar al hardware
+            response = await hardware_client.play_audio({
+                "audio_data": audio_b64,
+                "format": "wav",
+                "sample_rate": 22050  # Asumimos 22050 por defecto para TTS
+            })
+            
+            if response.get("success"):
+                self.logger.info("🔊 Audio sent to hardware for playback")
+            else:
+                self.logger.error(f"❌ Failed to send audio to hardware: {response.get('error', 'Unknown error')}")
+                
+        except Exception as e:
+            self.logger.error(f"❌ Error sending audio to hardware: {e}")
+    
+    async def _monitor_remote_availability(self):
+        """
+        Monitoriza periódicamente el estado del backend remoto y
+        actualiza remote_available. Se considera 'available' si el
+        cliente remoto está autenticado y funcionando correctamente.
+        """
+        self.logger.info("🌐 Starting remote availability monitor...")
+        initial_log_done = False
+
+        while self._running:
+            try:
+                # Verificar disponibilidad cada 30 segundos
+                await asyncio.sleep(30)
+                
+                if not self._running:
+                    break
+                
+                # Verificar si el cliente remoto está disponible
+                try:
+                    from clients.remote_backend_client import get_remote_client
+                    remote_client = get_remote_client()
+                    
+                    # Verificar autenticación
+                    if remote_client.is_authenticated:
+                        if not self.remote_available:
+                            self.set_remote_availability(True)
+                    else:
+                        if self.remote_available:
+                            self.set_remote_availability(False)
+                            
+                except Exception as e:
+                    if not initial_log_done:
+                        self.logger.warning(f"🌐 Remote client not available yet: {e}")
+                        initial_log_done = True
+                    if self.remote_available:
+                        self.set_remote_availability(False)
+                        
+            except asyncio.CancelledError:
+                self.logger.info("🛑 Remote availability monitor cancelled")
+                break
+            except Exception as e:
+                self.logger.error(f"❌ Error in remote availability monitor: {e}")
+                await asyncio.sleep(30)
     
     # ===============================================
     # GESTIÓN DEL BACKEND REMOTO

@@ -10,6 +10,10 @@ y la gestión de flujos de audio para grabación.
 import sounddevice as sd
 import numpy as np
 import time
+import os
+import sys
+import threading
+import base64
 from typing import Optional, Dict, Any, Callable, List
 from config import config
 from utils.logger import HardwareLogger, log_audio_event, log_performance_metric
@@ -56,6 +60,13 @@ class AudioManager:
         self.stream = None
         self.is_recording = False
         
+        # Configuración de salida de audio para reproducción
+        self.output_device_index = int(os.getenv("AUDIO_OUTPUT_DEVICE_INDEX", "0"))
+        self.output_sample_rate = int(os.getenv("AUDIO_OUTPUT_SAMPLE_RATE", "44100"))
+        self.audio_volume_percent = float(os.getenv("AUDIO_VOLUME_PERCENT", "30.0"))
+        self.audio_volume_db = float(os.getenv("AUDIO_VOLUME_DB", "-20.0"))
+        self.aplay_device = os.getenv("AUDIO_APLAY_DEVICE", "hw:0,0")
+        
         # Buffer circular continuo (3 segundos por defecto)
         self.continuous_buffer_duration = 3.0
         
@@ -77,6 +88,9 @@ class AudioManager:
         
         # Validar y ajustar configuración antes de crear buffers
         self._validate_device()
+        
+        # Verificar dispositivo de salida
+        self._validate_output_device()
         
         # Inicializar buffers según configuración validada
         if self.channels == 2:
@@ -236,6 +250,26 @@ class AudioManager:
             self.sample_rate != original_sample_rate):
             logger.info(f"Recreando buffers: {original_channels}ch@{original_sample_rate}Hz -> {self.channels}ch@{self.sample_rate}Hz")
             self._recreate_buffers()
+    
+    def _validate_output_device(self):
+        """Validar dispositivo de salida de audio"""
+        try:
+            devices = sd.query_devices()
+            if self.output_device_index < len(devices):
+                output_dev = devices[self.output_device_index]
+                if output_dev['max_output_channels'] > 0:
+                    logger.info(f"🔊 Output device: [{self.output_device_index}] {output_dev['name']}")
+                    logger.info(f"🔊 APLAY device: {self.aplay_device}")
+                    logger.info(f"🔊 Volume: {self.audio_volume_percent}% ({self.audio_volume_db}dB)")
+                else:
+                    logger.warning(f"⚠️ Device {self.output_device_index} has no output channels")
+                    self.output_device_index = None
+            else:
+                logger.warning(f"⚠️ Output device {self.output_device_index} not found")
+                self.output_device_index = None
+        except Exception as e:
+            logger.error(f"❌ Error validating output device: {e}")
+            self.output_device_index = None
     
     def _recreate_buffers(self):
         """
@@ -738,19 +772,231 @@ class AudioManager:
     # MÉTODOS DE REPRODUCCIÓN (Pendientes para fases posteriores)
     # =============================================================================
     
-    def play_audio(self, audio_data: np.ndarray) -> bool:
+    def play_audio(self, audio_data: np.ndarray, sample_rate: int = None) -> bool:
         """
-        Reproduce audio de forma síncrona.
+        Reproduce audio de forma síncrona con control de volumen.
         
         Args:
             audio_data: Datos de audio a reproducir
+            sample_rate: Tasa de muestreo (usa default si None)
             
         Returns:
             bool: True si la reproducción fue exitosa
         """
-        # TODO: Implementar en fases posteriores
-        logger.warning("play_audio() no implementado aún - pendiente para fases posteriores")
-        return False
+        try:
+            if sample_rate is None:
+                sample_rate = self.output_sample_rate
+            
+            # Normalizar audio
+            if audio_data.dtype == np.int16:
+                audio_float = audio_data.astype(np.float32) / 32768.0
+            elif audio_data.dtype == np.float64:
+                audio_float = audio_data.astype(np.float32)
+            elif audio_data.dtype == np.float32:
+                audio_float = audio_data
+            else:
+                audio_float = audio_data.astype(np.float32)
+            
+            # Aplicar control de volumen (convertir porcentaje a factor multiplicador)
+            volume_factor = self.audio_volume_percent / 100.0
+            audio_float = audio_float * volume_factor
+            
+            # Asegurar rango [-1, 1]
+            max_val = np.abs(audio_float).max()
+            if max_val > 1.0:
+                logger.warning(f"⚠️ Audio clipping detected after volume adjustment, normalizing...")
+                audio_float = audio_float / max_val
+            
+            duration = len(audio_float) / sample_rate
+            logger.info(f"🎵 Playing audio: {duration:.2f}s @ {sample_rate}Hz, volume: {self.audio_volume_percent}%")
+            
+            # Reproducir usando sounddevice con dispositivo configurado
+            try:
+                # Usar dispositivo por índice (sounddevice funciona mejor con índices)
+                sd.play(audio_float, samplerate=sample_rate, device=self.output_device_index)
+                sd.wait()  # Esperar a que termine
+                logger.info(f"✅ Audio playback completed on device {self.output_device_index}")
+                return True
+            except Exception as sd_error:
+                logger.error(f"❌ Sounddevice playback failed on device {self.output_device_index}: {sd_error}")
+                
+                # Fallback: probar con dispositivo por defecto
+                try:
+                    sd.play(audio_float, samplerate=sample_rate)  # Sin especificar device
+                    sd.wait()
+                    logger.info(f"✅ Audio playback completed on default device")
+                    return True
+                except Exception as fallback_error:
+                    logger.error(f"❌ Default device playback also failed: {fallback_error}")
+                    return False
+            
+        except Exception as e:
+            logger.error(f"❌ Error playing audio: {e}")
+            return False
+    
+    def set_volume(self, volume_percent: float) -> bool:
+        """
+        Cambiar el volumen de reproducción.
+        
+        Args:
+            volume_percent: Volumen en porcentaje (0-100)
+            
+        Returns:
+            bool: True si se cambió exitosamente
+        """
+        try:
+            if not 0 <= volume_percent <= 100:
+                logger.warning(f"⚠️ Volume {volume_percent}% out of range, clamping to 0-100%")
+                volume_percent = max(0, min(100, volume_percent))
+            
+            old_volume = self.audio_volume_percent
+            self.audio_volume_percent = volume_percent
+            
+            # Calcular dB aproximado (logarítmico)
+            if volume_percent > 0:
+                self.audio_volume_db = 20 * np.log10(volume_percent / 100.0)
+            else:
+                self.audio_volume_db = -60.0  # Silencio
+            
+            # Configurar volumen del hardware usando amixer
+            self._set_hardware_volume(volume_percent)
+            
+            logger.info(f"🔊 Volume changed: {old_volume}% → {volume_percent}% ({self.audio_volume_db:.1f}dB)")
+            return True
+            
+        except Exception as e:
+            logger.error(f"❌ Error setting volume: {e}")
+            return False
+    
+    def _set_hardware_volume(self, volume_percent: float):
+        """
+        Configurar el volumen del hardware usando amixer
+        
+        Args:
+            volume_percent: Volumen en porcentaje (0-100)
+        """
+        try:
+            import subprocess
+            
+            # Para la tarjeta bcm2835 Headphones (card 0)
+            # Intentar configurar el volumen principal
+            commands_to_try = [
+                ['amixer', '-c', '0', 'sset', 'PCM', f'{int(volume_percent)}%'],
+                ['amixer', '-c', '0', 'sset', 'Master', f'{int(volume_percent)}%'],
+                ['amixer', '-c', '0', 'sset', 'Headphone', f'{int(volume_percent)}%'],
+                ['amixer', 'sset', 'PCM', f'{int(volume_percent)}%'],
+                ['amixer', 'sset', 'Master', f'{int(volume_percent)}%']
+            ]
+            
+            for cmd in commands_to_try:
+                try:
+                    result = subprocess.run(
+                        cmd,
+                        capture_output=True,
+                        text=True,
+                        timeout=5
+                    )
+                    if result.returncode == 0:
+                        logger.info(f"🔊 Hardware volume set with: {' '.join(cmd)}")
+                        return
+                    else:
+                        logger.debug(f"Command failed: {' '.join(cmd)} - {result.stderr}")
+                except subprocess.TimeoutExpired:
+                    logger.warning(f"Timeout running: {' '.join(cmd)}")
+                except Exception as e:
+                    logger.debug(f"Error with command {' '.join(cmd)}: {e}")
+            
+            logger.warning("⚠️ Could not set hardware volume with any amixer command")
+            
+        except Exception as e:
+            logger.error(f"❌ Error setting hardware volume: {e}")
+    
+    def get_volume(self) -> Dict[str, float]:
+        """
+        Obtener información actual del volumen.
+        
+        Returns:
+            Dict con información del volumen
+        """
+        # También intentar obtener el volumen del hardware
+        hardware_volume = self._get_hardware_volume()
+        
+        result = {
+            "volume_percent": self.audio_volume_percent,
+            "volume_db": self.audio_volume_db,
+            "volume_factor": self.audio_volume_percent / 100.0
+        }
+        
+        if hardware_volume is not None:
+            result["hardware_volume_percent"] = hardware_volume
+        
+        return result
+    
+    def _get_hardware_volume(self) -> Optional[float]:
+        """
+        Obtener el volumen actual del hardware usando amixer
+        
+        Returns:
+            Volumen en porcentaje o None si no se pudo obtener
+        """
+        try:
+            import subprocess
+            import re
+            
+            commands_to_try = [
+                ['amixer', '-c', '0', 'sget', 'PCM'],
+                ['amixer', '-c', '0', 'sget', 'Master'],
+                ['amixer', '-c', '0', 'sget', 'Headphone'],
+                ['amixer', 'sget', 'PCM'],
+                ['amixer', 'sget', 'Master']
+            ]
+            
+            for cmd in commands_to_try:
+                try:
+                    result = subprocess.run(
+                        cmd,
+                        capture_output=True,
+                        text=True,
+                        timeout=5
+                    )
+                    if result.returncode == 0:
+                        # Buscar patrón como [75%] en la salida
+                        match = re.search(r'\[(\d+)%\]', result.stdout)
+                        if match:
+                            return float(match.group(1))
+                except Exception:
+                    continue
+            
+            return None
+            
+        except Exception as e:
+            logger.debug(f"Error getting hardware volume: {e}")
+            return None
+    
+    def play_audio_base64(self, audio_base64: str, sample_rate: int = None) -> bool:
+        """
+        Reproducir audio desde string Base64
+        
+        Args:
+            audio_base64: Audio en formato Base64
+            sample_rate: Sample rate (opcional)
+            
+        Returns:
+            True si la reproducción fue exitosa
+        """
+        try:
+            # Decodificar Base64
+            audio_bytes = base64.b64decode(audio_base64)
+            
+            # Convertir bytes a numpy array (asumiendo PCM 16-bit)
+            audio_array = np.frombuffer(audio_bytes, dtype=np.int16)
+            
+            # Reproducir
+            return self.play_audio(audio_array, sample_rate)
+            
+        except Exception as e:
+            logger.error(f"❌ Error decoding/playing base64 audio: {e}")
+            return False
     
     def play_audio_async(self, audio_data: np.ndarray, callback: Callable = None) -> bool:
         """
@@ -763,9 +1009,19 @@ class AudioManager:
         Returns:
             bool: True si se inició la reproducción
         """
-        # TODO: Implementar en fases posteriores  
-        logger.warning("play_audio_async() no implementado aún - pendiente para fases posteriores")
-        return False
+        try:
+            def play_thread():
+                success = self.play_audio(audio_data)
+                if callback:
+                    callback(success)
+            
+            thread = threading.Thread(target=play_thread, daemon=True)
+            thread.start()
+            return True
+            
+        except Exception as e:
+            logger.error(f"❌ Error starting async audio playback: {e}")
+            return False
 
     def __enter__(self):
         return self

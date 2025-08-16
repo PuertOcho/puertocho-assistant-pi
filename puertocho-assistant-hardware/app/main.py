@@ -210,6 +210,7 @@ class HardwareService(EventMixin):
         from api.http_server import HTTPServer
         self.components['http_server'] = HTTPServer(
             state_manager=self.components['state_manager'],
+            audio_manager=self.components['audio_manager'],
             port=8080
         )
         

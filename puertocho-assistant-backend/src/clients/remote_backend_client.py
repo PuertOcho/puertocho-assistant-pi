@@ -36,6 +36,11 @@ class RemoteBackendClient:
         self.email = os.getenv("REMOTE_BACKEND_EMAIL", "service@puertocho.local")
         self.password = os.getenv("REMOTE_BACKEND_PASSWORD", "servicepass123")
         
+        # Configuración de modo conversacional (Epic4)
+        self.conversation_path = os.getenv("REMOTE_BACKEND_CONVERSATION_PATH", "/api/v1/conversation/process/audio")
+        self.default_language = os.getenv("REMOTE_BACKEND_LANGUAGE", "es")
+        self.api_mode = os.getenv("REMOTE_BACKEND_API_MODE", "conversation")  # conversation|pipeline
+        
         # Configuración de timeouts y reintentos
         self.timeout = float(os.getenv("REMOTE_BACKEND_TIMEOUT", "60.0"))
         self.retry_attempts = int(os.getenv("REMOTE_BACKEND_RETRY_ATTEMPTS", "3"))
@@ -412,6 +417,130 @@ class RemoteBackendClient:
             "success": False,
             "error": f"Failed after {self.retry_attempts} attempts"
         }
+        
+    async def send_audio_for_conversation(
+        self,
+        audio_data: bytes,
+        session_id: str,
+        user_id: str,
+        language: Optional[str] = None,
+        metadata_json: Optional[str] = None,
+        generate_audio_response: bool = True,
+    ) -> Dict[str, Any]:
+        """
+        Enviar audio al endpoint conversacional del backend remoto.
+        POST {REMOTE_BACKEND_URL}{REMOTE_BACKEND_CONVERSATION_PATH}
+        Multipart/form-data fields:
+        - audio (file)
+        - sessionId (string)
+        - userId (string)
+        - language (string)
+        - generateAudioResponse (boolean)
+        - metadata (string JSON)
+        """
+        # Asegurar autenticación válida
+        if not await self._ensure_authenticated():
+            return {
+                "success": False,
+                "error": "Failed to authenticate with remote backend"
+            }
+        
+        lang = (language or self.default_language or "es").strip() or "es"
+        meta_str = metadata_json if isinstance(metadata_json, str) else (json.dumps(metadata_json) if metadata_json else "{}")
+        url = f"{self.base_url}{self.conversation_path}"
+        
+        for attempt in range(self.retry_attempts):
+            try:
+                self.logger.info(f"🗣️ Sending audio to conversation endpoint (attempt {attempt + 1})...")
+                self.logger.info(f"🔗 URL: {url}")
+                self.logger.info(f"👤 Session: {session_id}, User: {user_id}, Language: {lang}")
+                
+                # Preparar headers de autenticación
+                headers = {
+                    "Authorization": f"Bearer {self.access_token}"
+                }
+                
+                # Preparar archivo de audio
+                files = {
+                    "audio": ("audio.wav", audio_data, "audio/wav")
+                }
+                
+                # Preparar datos del formulario
+                form_data = {
+                    "sessionId": session_id,
+                    "userId": user_id,
+                    "language": lang,
+                    "generateAudioResponse": str(generate_audio_response).lower(),
+                    "metadata": meta_str
+                }
+                
+                # Enviar petición
+                response = await self.session.post(
+                    url,
+                    files=files,
+                    data=form_data,
+                    headers=headers
+                )
+                
+                # Manejar token expirado
+                if response.status_code == 401:
+                    self.logger.warning(f"🔒 Token expired (attempt {attempt + 1}), refreshing...")
+                    if await self._refresh_auth_token():
+                        continue
+                    else:
+                        return {"success": False, "error": "Authentication expired and refresh failed"}
+                
+                # Respuesta exitosa
+                if response.status_code == 200:
+                    result = response.json()
+                    self.logger.info(f"✅ Conversation response received")
+                    if result.get("text"):
+                        self.logger.info(f"Text: {result['text'][:100]}...")
+                    if result.get("audioResponse"):
+                        self.logger.info(f"Audio response included (base64 length: {len(str(result['audioResponse']))})")
+                    
+                    return {"success": True, **result}
+                else:
+                    error_detail = "Unknown error"
+                    try:
+                        error_data = response.json()
+                        error_detail = error_data.get("detail", error_data.get("message", str(error_data)))
+                    except:
+                        error_detail = response.text
+                    
+                    self.logger.error(f"❌ Conversation endpoint error ({response.status_code}): {error_detail}")
+                    
+                    if 400 <= response.status_code < 500:
+                        return {"success": False, "error": f"Backend error {response.status_code}: {error_detail}"}
+                    
+                    if attempt < self.retry_attempts - 1:
+                        await asyncio.sleep(self.retry_delay * (attempt + 1))
+                        continue
+                    
+                    return {"success": False, "error": f"Backend error after {self.retry_attempts} attempts: {error_detail}"}
+                    
+            except httpx.TimeoutException:
+                self.logger.error(f"❌ Timeout in conversation endpoint (attempt {attempt + 1})")
+                if attempt < self.retry_attempts - 1:
+                    await asyncio.sleep(self.retry_delay * (attempt + 1))
+                    continue
+                return {"success": False, "error": "Timeout communicating with remote backend"}
+                
+            except httpx.ConnectError:
+                self.logger.error(f"❌ Connection error to conversation endpoint (attempt {attempt + 1})")
+                if attempt < self.retry_attempts - 1:
+                    await asyncio.sleep(self.retry_delay * (attempt + 1))
+                    continue
+                return {"success": False, "error": "Cannot connect to remote backend"}
+                
+            except Exception as e:
+                self.logger.error(f"❌ Unexpected error in conversation (attempt {attempt + 1}): {e}")
+                if attempt < self.retry_attempts - 1:
+                    await asyncio.sleep(self.retry_delay * (attempt + 1))
+                    continue
+                return {"success": False, "error": f"Unexpected error: {str(e)}"}
+        
+        return {"success": False, "error": f"Failed after {self.retry_attempts} attempts"}
         
     async def health_check(self) -> Dict[str, Any]:
         """

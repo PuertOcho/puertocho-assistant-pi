@@ -243,6 +243,42 @@ class HardwareClient:
         except Exception as e:
             self.logger.warning(f"Could not get audio files list: {e}")
             return []
+    
+    async def play_audio(self, audio_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Enviar audio al hardware para reproducción.
+        
+        Args:
+            audio_data: Dict con:
+                - audio_data: string base64 con datos de audio
+                - format: formato del audio (ej: 'wav')
+                - sample_rate: tasa de muestreo (opcional)
+        
+        Returns:
+            Dict con resultado de la operación
+        """
+        self.logger.info("🔊 Sending audio to hardware for playback...")
+        
+        try:
+            response = await self._make_request(
+                "POST",
+                "/audio/play",
+                json_data=audio_data
+            )
+            
+            if response.get("success"):
+                self.logger.info("✅ Audio sent to hardware successfully")
+            else:
+                self.logger.warning(f"⚠️ Hardware audio playback warning: {response.get('message', 'Unknown')}")
+            
+            return response
+            
+        except Exception as e:
+            self.logger.error(f"❌ Failed to send audio to hardware: {e}")
+            return {
+                "success": False,
+                "error": str(e)
+            }
 
 
 # Instancia singleton del cliente hardware (se inicializa en main.py)

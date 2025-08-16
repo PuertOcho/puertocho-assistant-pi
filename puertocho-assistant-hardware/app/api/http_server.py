@@ -39,14 +39,25 @@ class ButtonSimulateRequest(BaseModel):
     event_type: str  # 'short', 'long'
     duration: Optional[float] = None  # Duración personalizada
 
+class AudioVolumeRequest(BaseModel):
+    """Modelo para cambiar volumen de audio"""
+    volume_percent: float  # 0-100
+
+class AudioPlayRequest(BaseModel):
+    """Modelo para reproducir audio (Epic 4)"""
+    audio_data: str  # Base64 encoded audio data
+    format: str = "wav"  # Audio format
+    sample_rate: Optional[int] = 22050  # Sample rate
+
 class HTTPServer:
     """
     Servidor HTTP para la API REST del hardware.
     Proporciona endpoints para control y monitoreo del hardware.
     """
     
-    def __init__(self, state_manager: StateManager, port: int = 8080):
+    def __init__(self, state_manager: StateManager, audio_manager=None, port: int = 8080):
         self.state_manager = state_manager
+        self.audio_manager = audio_manager
         self.port = port
         self.logger = logging.getLogger("http_server")
         
@@ -374,6 +385,170 @@ class HTTPServer:
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     detail=f"Error getting audio status: {str(e)}"
                 )
+
+        # ========================
+        # EPIC 4 - AUDIO PLAYBACK ENDPOINT
+        # ========================
+        
+        @self.app.post("/audio/play",
+                      summary="Play Audio Response",
+                      description="Reproducir audio de respuesta del backend remoto")
+        async def play_audio(request: AudioPlayRequest):
+            """Reproducir audio enviado desde el backend"""
+            try:
+                self.logger.info("🔊 Received audio playback request")
+                
+                # Usar el AudioManager pasado desde main.py
+                if self.audio_manager is None:
+                    self.logger.error("❌ AudioManager not available in HTTPServer")
+                    return {
+                        "success": False,
+                        "error": "AudioManager not initialized",
+                        "timestamp": datetime.now().isoformat()
+                    }
+                
+                # Reproducir audio usando AudioManager
+                success = self.audio_manager.play_audio_base64(
+                    request.audio_data,
+                    request.sample_rate
+                )
+                
+                if success:
+                    return {
+                        "success": True,
+                        "message": "Audio played successfully",
+                        "format": request.format,
+                        "sample_rate": request.sample_rate,
+                        "timestamp": datetime.now().isoformat()
+                    }
+                else:
+                    return {
+                        "success": False,
+                        "error": "Audio playback failed",
+                        "timestamp": datetime.now().isoformat()
+                    }
+                        
+            except HTTPException:
+                raise
+            except Exception as e:
+                self.logger.error(f"❌ Error in audio playback: {e}")
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Audio playback error: {str(e)}"
+                )
+
+        @self.app.get("/audio/test-beep",
+                     summary="Test Audio Beep",
+                     description="Generar beep de prueba para verificar audio")
+        async def test_beep():
+            """Generar beep de prueba"""
+            try:
+                import numpy as np
+                
+                # Usar el AudioManager pasado desde main.py
+                if self.audio_manager is None:
+                    self.logger.error("❌ AudioManager not available in HTTPServer")
+                    return {
+                        "success": False,
+                        "error": "AudioManager not initialized"
+                    }
+                
+                # Generar tono de 440Hz por 0.5 segundos
+                sample_rate = 44100
+                duration = 0.5
+                frequency = 440
+                
+                t = np.linspace(0, duration, int(sample_rate * duration), False)
+                audio_array = np.sin(2 * np.pi * frequency * t)
+                audio_array = (audio_array * 32767).astype(np.int16)
+                
+                # Reproducir usando el AudioManager existente
+                success = self.audio_manager.play_audio(audio_array, sample_rate)
+                
+                if success:
+                    return {
+                        "success": True,
+                        "message": f"Played {frequency}Hz tone for {duration}s",
+                        "frequency": frequency,
+                        "duration": duration,
+                        "sample_rate": sample_rate
+                    }
+                else:
+                    return {
+                        "success": False,
+                        "error": "Test beep playback failed"
+                    }
+                    
+            except Exception as e:
+                self.logger.error(f"❌ Error generating test beep: {e}")
+                return {
+                    "success": False,
+                    "error": f"Test beep error: {str(e)}"
+                }
+
+        @self.app.get("/audio/volume",
+                     summary="Get Audio Volume",
+                     description="Obtener el volumen actual de reproducción")
+        async def get_volume():
+            """Obtener volumen actual"""
+            try:
+                if self.audio_manager is None:
+                    return {
+                        "success": False,
+                        "error": "AudioManager not initialized"
+                    }
+                
+                volume_info = self.audio_manager.get_volume()
+                
+                return {
+                    "success": True,
+                    "volume": volume_info,
+                    "timestamp": datetime.now().isoformat()
+                }
+                
+            except Exception as e:
+                self.logger.error(f"❌ Error getting volume: {e}")
+                return {
+                    "success": False,
+                    "error": f"Volume error: {str(e)}"
+                }
+
+        @self.app.post("/audio/volume",
+                      summary="Set Audio Volume",
+                      description="Cambiar el volumen de reproducción")
+        async def set_volume(volume_request: AudioVolumeRequest):
+            """Configurar volumen del audio"""
+            try:
+                if self.audio_manager is None:
+                    return {
+                        "success": False,
+                        "error": "AudioManager not initialized"
+                    }
+                
+                # Configurar el volumen
+                result = self.audio_manager.set_volume(
+                    volume_percent=volume_request.volume_percent
+                )
+                
+                if result:
+                    return {
+                        "success": True,
+                        "message": f"Volume set to {volume_request.volume_percent}%",
+                        "volume": self.audio_manager.get_volume(),
+                        "timestamp": datetime.now().isoformat()
+                    }
+                else:
+                    return {
+                        "success": False,
+                        "error": "Failed to set volume"
+                    }
+                
+            except Exception as e:
+                self.logger.error(f"❌ Error setting volume: {e}")
+                return {
+                    "success": False,
+                    "error": f"Volume setting error: {str(e)}"
+                }
 
         # ========================
         # ENDPOINTS DE CONTROL DE HARDWARE (HW-API-04)

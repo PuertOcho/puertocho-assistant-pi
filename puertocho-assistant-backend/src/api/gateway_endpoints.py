@@ -841,3 +841,97 @@ async def process_audio_legacy(audio: UploadFile = File(...)):
     """
     logger.info("📎 Legacy audio processing endpoint called, redirecting...")
     return await receive_audio_from_hardware(audio)
+
+
+# ===============================================
+# EPIC 4 - ENDPOINTS DE MONITOREO Y CONTROL
+# ===============================================
+
+@router.get("/api/v1/remote/status")
+async def remote_backend_status():
+    """
+    Verificar estado del cliente de backend remoto.
+    """
+    try:
+        from clients.remote_backend_client import get_remote_client
+        remote_client = get_remote_client()
+        
+        return JSONResponse(content={
+            "authenticated": remote_client.is_authenticated,
+            "base_url": remote_client.base_url,
+            "email": remote_client.email,
+            "token_expires_at": remote_client.token_expires_at.isoformat() if remote_client.token_expires_at else None,
+            "status": "authenticated" if remote_client.is_authenticated else "not_authenticated"
+        })
+        
+    except Exception as e:
+        logger.error(f"❌ Error checking remote backend status: {e}")
+        return JSONResponse(content={
+            "authenticated": False,
+            "error": str(e),
+            "status": "error"
+        }, status_code=500)
+
+
+@router.get("/api/v1/audio/queue/status")
+async def audio_queue_status():
+    """
+    Obtener estado de la cola de procesamiento de audio.
+    """
+    try:
+        audio_processor = get_audio_processor()
+        queue_status = audio_processor.get_queue_status()
+        
+        return JSONResponse(content={
+            "remote_available": audio_processor.remote_available,
+            "is_processing": audio_processor.is_processing,
+            "queue_size": len(audio_processor.processing_queue),
+            "max_queue_size": audio_processor.max_queue_size,
+            **queue_status
+        })
+        
+    except Exception as e:
+        logger.error(f"❌ Error getting audio queue status: {e}")
+        return JSONResponse(content={
+            "error": str(e)
+        }, status_code=500)
+
+
+@router.get("/api/v1/audio/verification/info")
+async def audio_verification_info():
+    """
+    Obtener información de archivos de verificación de audio.
+    """
+    try:
+        audio_processor = get_audio_processor()
+        verification_info = await audio_processor.get_verification_files_info()
+        
+        return JSONResponse(content=verification_info)
+        
+    except Exception as e:
+        logger.error(f"❌ Error getting verification info: {e}")
+        return JSONResponse(content={
+            "error": str(e)
+        }, status_code=500)
+
+
+@router.get("/api/v1/audio/verification/files")
+async def list_verification_files(limit: int = 50):
+    """
+    Listar archivos de verificación de audio.
+    """
+    try:
+        audio_processor = get_audio_processor()
+        files_list = await audio_processor.list_verification_files(limit=limit)
+        
+        return JSONResponse(content={
+            "files": files_list,
+            "total_returned": len(files_list),
+            "limit": limit
+        })
+        
+    except Exception as e:
+        logger.error(f"❌ Error listing verification files: {e}")
+        return JSONResponse(content={
+            "error": str(e)
+        }, status_code=500)
