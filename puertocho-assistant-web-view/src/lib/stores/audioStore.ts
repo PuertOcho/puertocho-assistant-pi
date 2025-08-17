@@ -161,7 +161,7 @@ export const audioActions = {
 };
 
 // Auto-sync functionality
-let syncInterval: NodeJS.Timeout | null = null;
+let syncInterval: number | null = null;
 
 export const audioSync = {
   /**
