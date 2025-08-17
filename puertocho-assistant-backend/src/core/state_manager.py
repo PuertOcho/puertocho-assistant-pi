@@ -54,7 +54,7 @@ class StateManagerGateway:
         self.websocket_manager = websocket_manager
         
         # Configuration
-        self.hardware_sync_interval: float = 5.0  # Sync cada 5 segundos
+        self.hardware_sync_interval: float = 1.0  # Sync cada 1 segundo (reducido para mejor responsividad)
         self.hardware_timeout: float = 30.0       # Timeout de hardware
         
         # Tasks

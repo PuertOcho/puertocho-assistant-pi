@@ -1,28 +1,26 @@
-# Multi-stage build optimizado para Raspberry Pi con soporte para modo kiosko
-# Etapa 1: Build de la aplicación
-FROM node:20-alpine AS builder
+# Dockerfile simplificado para desarrollo en Raspberry Pi
+FROM nginx:alpine
 
-# Establecer directorio de trabajo
+# Instalar Node.js para servir como fallback
+RUN apk add --no-cache nodejs npm
+
+# Crear directorio para la aplicación
 WORKDIR /app
 
-# Copiar archivos de configuración
+# Copiar archivos de desarrollo directamente
 COPY package*.json ./
+COPY src/ ./src/
+COPY static/ ./static/
 COPY svelte.config.js ./
 COPY vite.config.ts ./
 COPY tsconfig.json ./
 
-# Instalar dependencias
-RUN npm ci
+# Copiar configuración de nginx optimizada
+COPY nginx.conf /etc/nginx/nginx.conf
 
-# Copiar código fuente
-COPY src/ ./src/
-COPY static/ ./static/
-
-# Construir la aplicación para producción
-RUN npm run build
-
-# Etapa 2: Servidor de producción con soporte kiosko
-FROM nginx:alpine
+# Crear directorio build temporal (se llenará en runtime)
+RUN mkdir -p /usr/share/nginx/html && \
+    echo '<!DOCTYPE html><html><head><title>Loading...</title></head><body><h1>Starting PuertoCho Assistant...</h1><script>setTimeout(() => location.reload(), 3000);</script></body></html>' > /usr/share/nginx/html/index.html
 
 # Instalar dependencias para modo kiosko
 RUN apk add --no-cache \
@@ -35,12 +33,6 @@ RUN apk add --no-cache \
     xset \
     supervisor \
     && mkdir -p /var/log/supervisor
-
-# Copiar archivos construidos al directorio de nginx
-COPY --from=builder /app/build /usr/share/nginx/html
-
-# Copiar configuración personalizada de nginx
-COPY nginx.conf /etc/nginx/nginx.conf
 
 # Copiar scripts de kiosko
 COPY scripts/ /opt/kiosk/

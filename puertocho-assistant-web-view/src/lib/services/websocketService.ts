@@ -78,7 +78,7 @@ export function connect() {
             timestamp: payload.current_audio.timestamp || new Date().toISOString(),
             duration: payload.current_audio.duration || 0,
             size: payload.current_audio.size || 0,
-            status: 'completed',
+            status: 'completed' as const,
             quality_score: payload.current_audio.quality_score,
             url: payload.current_audio.url
           },
@@ -87,7 +87,7 @@ export function connect() {
       }
     }
 
-    // Hardware events
+    // Hardware events (eventos en tiempo real con mayor prioridad)
     if (data.type === 'hardware_event') {
       const payload = data.payload;
       

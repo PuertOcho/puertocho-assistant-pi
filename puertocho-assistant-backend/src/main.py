@@ -265,6 +265,87 @@ async def websocket_endpoint(websocket: WebSocket):
         websocket_manager.disconnect(websocket)
 
 
+# @app.websocket("/hardware-ws")
+async def hardware_websocket_endpoint_disabled(websocket: WebSocket):
+    """
+    Endpoint WebSocket dedicado para comunicación con hardware.
+    Maneja eventos en tiempo real desde el hardware.
+    """
+    try:
+        await websocket.accept()
+        backend_logger.info("🔗 Hardware WebSocket connected")
+        
+        # Loop principal para recibir mensajes del hardware
+        while True:
+            try:
+                # Recibir mensaje del hardware
+                data = await websocket.receive_json()
+                message_type = data.get("type", "unknown")
+                message_data = data.get("data", {})
+                
+                backend_logger.info(f"📡 Hardware WebSocket message: {message_type}")
+                
+                # Procesar eventos del hardware
+                state_manager = get_state_manager()
+                
+                if message_type == "state_changed":
+                    # Evento de cambio de estado en tiempo real
+                    old_state = message_data.get("old_state", "unknown")
+                    new_state = message_data.get("new_state", "unknown")
+                    
+                    backend_logger.info(f"🔄 Hardware state change: {old_state} -> {new_state}")
+                    
+                    # Procesar el evento
+                    await state_manager.handle_hardware_event({
+                        "type": "state_change",
+                        "old_state": old_state,
+                        "new_state": new_state,
+                        "context": message_data.get("context", {}),
+                        "timestamp": data.get("timestamp", datetime.now().isoformat())
+                    })
+                    
+                elif message_type == "audio_captured":
+                    # Evento de audio capturado
+                    await state_manager.handle_hardware_event({
+                        "type": "audio_captured",
+                        "data": message_data,
+                        "timestamp": data.get("timestamp", datetime.now().isoformat())
+                    })
+                    
+                elif message_type == "button_event":
+                    # Evento de botón
+                    await state_manager.handle_hardware_event({
+                        "type": "button_press",
+                        "button_type": message_data.get("event_type", "unknown"),
+                        "duration": message_data.get("duration", 0.0),
+                        "timestamp": data.get("timestamp", datetime.now().isoformat())
+                    })
+                    
+                elif message_type == "hardware_metrics":
+                    # Métricas del hardware (opcional: no notificar al frontend para esto)
+                    backend_logger.debug(f"📊 Hardware metrics received")
+                    
+                else:
+                    backend_logger.warning(f"⚠️ Unknown hardware message type: {message_type}")
+                    
+            except WebSocketDisconnect:
+                backend_logger.info("🔌 Hardware WebSocket disconnected normally")
+                break
+            except Exception as e:
+                backend_logger.error(f"❌ Error in hardware WebSocket: {e}")
+                break
+                
+    except Exception as e:
+        backend_logger.error(f"❌ Hardware WebSocket error: {e}")
+    finally:
+        backend_logger.info("🔌 Hardware WebSocket connection closed")
+
+
+# ===============================================================================
+# AUDIO PROCESSING ENDPOINTS (BACKEND-AUDIO-01)
+# ===============================================================================
+
+
 async def handle_manual_activation(data: dict):
     """Manejar activación manual desde el frontend"""
     try:
