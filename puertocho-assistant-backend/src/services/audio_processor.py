@@ -543,7 +543,7 @@ class AudioProcessor:
             remote_client = get_remote_client()
             
             # Leer datos de audio
-            audio_file_path = entry.get('temp_file_path')
+            audio_file_path = entry.get('temp_path')
             if not audio_file_path or not os.path.exists(audio_file_path):
                 raise ValueError(f"Audio file not found: {audio_file_path}")
             

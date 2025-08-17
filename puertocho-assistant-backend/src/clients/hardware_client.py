@@ -263,7 +263,7 @@ class HardwareClient:
             response = await self._make_request(
                 "POST",
                 "/audio/play",
-                json_data=audio_data
+                json=audio_data
             )
             
             if response.get("success"):
