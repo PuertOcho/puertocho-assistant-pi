@@ -52,9 +52,13 @@ services:
     container_name: puertocho-web-dashboard
     network_mode: host
     environment:
-      - NODE_ENV=production
+      - HOT_RELOAD_ENABLED=${HOT_RELOAD_ENABLED:-false}
       - VITE_BACKEND_WS_URL=ws://localhost:8000/ws
       - VITE_BACKEND_HTTP_URL=http://localhost:8000
+      # Hot reload configuration
+      - VITE_HMR_PORT=${VITE_HMR_PORT:-24678}
+      - CHOKIDAR_USEPOLLING=${CHOKIDAR_USEPOLLING:-true}
+      - CHOKIDAR_INTERVAL=${CHOKIDAR_INTERVAL:-1000}
       # Kiosk mode configuration
       - KIOSK_MODE=${KIOSK_MODE:-false}
       - KIOSK_RESOLUTION=${KIOSK_RESOLUTION:-1920x1080}
@@ -67,6 +71,15 @@ services:
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
       # Mount device for potential touch screen access
       - /dev:/dev:ro
+      # Hot reload volumes (only active when HOT_RELOAD_MODE=development)
+      - ./puertocho-assistant-web-view/src:/app/src
+      - ./puertocho-assistant-web-view/static:/app/static
+      - ./puertocho-assistant-web-view/package.json:/app/package.json
+      - ./puertocho-assistant-web-view/svelte.config.js:/app/svelte.config.js
+      - ./puertocho-assistant-web-view/vite.config.ts:/app/vite.config.ts
+      - ./puertocho-assistant-web-view/tsconfig.json:/app/tsconfig.json
+      # Exclude node_modules to avoid conflicts
+      - /app/node_modules
     privileged: false  # Set to true if touch screen access is needed
     depends_on:
       - puertocho-backend

@@ -118,17 +118,25 @@ launch_browser() {
         --disable-background-timer-throttling
         --disable-renderer-backgrounding
         --disable-backgrounding-occluded-windows
-        --disable-features=TranslateUI
+        --disable-features=TranslateUI,VizDisplayCompositor,VizServiceDisplayCompositor
         --disable-extensions
         --disable-dev-shm-usage
         --no-sandbox
+        --disable-gpu
         --disable-gpu-sandbox
+        --disable-gpu-compositing
+        --disable-gpu-rasterization
+        --disable-software-rasterizer
         --disable-web-security
+        --disable-features=VizServiceDisplayCompositor
+        --use-gl=swiftshader-webgl
+        --enable-unsafe-swiftshader
         --allow-running-insecure-content
         --ignore-certificate-errors
         --ignore-ssl-errors
         --ignore-certificate-errors-spki-list
         --ignore-certificate-errors-ssl-errors
+        --user-data-dir=/tmp/chromium-data
         --app="$DASHBOARD_URL"
     )
     

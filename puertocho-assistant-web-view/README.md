@@ -1,8 +1,79 @@
 # PuertoCho Assistant - Web Dashboard
 
-## Descripción General
+Dashboard web en Svelte con soporte para hot-reload y modo kiosk.
 
-Este proyecto es la cara visible del Asistente PuertoCho. Es un dashboard web interactivo, construido con Svelte, que permite a los usuarios visualizar el estado del asistente en tiempo real y controlar algunas de sus funciones. Su principal objetivo es proporcionar una retroalimentación visual clara y una forma de interacción manual con el sistema.
+## Configuración
+
+### Variables de entorno principales
+
+```bash
+# Hot-reload (desarrollo)
+HOT_RELOAD_ENABLED=true    # true/false - Habilita servidor de desarrollo Vite
+
+# Kiosk (pantalla completa)
+KIOSK_MODE=true           # true/false - Habilita modo kiosk con navegador
+KIOSK_RESOLUTION=800x480  # Resolución de pantalla
+DISPLAY=:0                # Display X11
+
+# Configuración de HMR
+VITE_HMR_PORT=24678
+CHOKIDAR_USEPOLLING=true
+CHOKIDAR_INTERVAL=1000
+```
+
+## Modos de operación
+
+### 1. Desarrollo con hot-reload (sin kiosk)
+```bash
+HOT_RELOAD_ENABLED=true
+KIOSK_MODE=false
+```
+- Inicia servidor Vite en puerto 3000
+- Cambios en código se reflejan automáticamente
+- Accesible en navegador normal
+
+### 2. Desarrollo con hot-reload + kiosk
+```bash
+HOT_RELOAD_ENABLED=true
+KIOSK_MODE=true
+```
+- Inicia servidor Vite en puerto 3000
+- Abre navegador Chromium en modo kiosk
+- Cambios en código se reflejan en la pantalla kiosk
+
+### 3. Producción sin kiosk
+```bash
+HOT_RELOAD_ENABLED=false
+KIOSK_MODE=false
+```
+- Construye aplicación estática
+- Sirve con nginx en puerto 3000
+
+### 4. Producción con kiosk
+```bash
+HOT_RELOAD_ENABLED=false
+KIOSK_MODE=true
+```
+- Construye aplicación estática
+- Sirve con nginx + abre navegador en modo kiosk
+
+## Arquitectura
+
+- **docker-entrypoint.sh**: Punto de entrada principal
+- **supervisor.conf**: Gestiona nginx y kiosk browser
+- **kiosk-launcher.sh**: Lanza navegador en modo kiosk
+- **supervisor-control.sh**: Controla dinámicamente nginx según configuración
+
+## Puertos
+
+- **3000**: Puerto principal del dashboard
+- **24678**: Puerto HMR para hot-reload
+
+## Volúmenes importantes
+
+- `./src:/app/src`: Código fuente (para hot-reload)
+- `./static:/app/static`: Archivos estáticos
+- `/tmp/.X11-unix:/tmp/.X11-unix:rw`: Socket X11 (para kiosk)
 
 ## Arquitectura y Comunicación
 

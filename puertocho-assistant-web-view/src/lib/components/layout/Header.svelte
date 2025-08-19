@@ -4,7 +4,7 @@
 
 <header class="app-header">
   <div class="header-content">
-    <h1>Dashboard de PuertoCho Assistant</h1>
+    <h1>Dashboard PuertoCho Assistant 1</h1>
     <div class="connection-status">
       {#if $isConnected}
         <span class="dot connected"></span> Conectado
