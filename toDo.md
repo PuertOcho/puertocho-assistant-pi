@@ -135,7 +135,7 @@
 - ✅ **Pantalla completa**: Chromium lanzado en modo fullscreen sin bordes ni barras
 - ✅ **Compatibilidad Raspberry Pi**: Funcionamiento verificado en hardware real con pantalla táctil
 
-### 4. Reproducir el audio recibido desde hardware como respuesta
+### 4. Reproducir el audio recibido desde hardware como respuesta ✅
 
 **OBJETIVO**: Implementar comunicación completa con Backend Remoto y reproducción de respuestas de audio.
 
@@ -185,51 +185,51 @@
 - [x] **4.2 Rediseñar IntentManagerMS con LLM-RAG y Arquitectura MoE**
   - *Objetivo*: Implementación completamente nueva de intentmanagerms usando arquitectura LLM-RAG + Mixture of Experts (MoE) para clasificación de intenciones escalable, conversación multivuelta inteligente y soporte nativo MCP.
 
-- [ ] **4.3 Actualizar AudioProcessor para Backend Remoto**
-  - [ ] Modificar `_send_to_remote_backend()` en `audio_processor.py`
-  - [ ] Implementar manejo de respuestas por tipo: `audio`, `text`, `action`
-  - [ ] Añadir método `_handle_audio_response()` para coordinar reproducción
-  - [ ] Integrar con `HardwareClient` para envío de audio a reproductor
-  - [ ] Actualizar flujo de WebSocket para notificar respuestas
+- [x] **4.3 Actualizar AudioProcessor para Backend Remoto**
+  - [x] Modificar `_send_to_remote_backend()` en `audio_processor.py`
+  - [x] Implementar manejo de respuestas por tipo: `audio`, `text`, `action`
+  - [x] Añadir método `_handle_audio_response()` para coordinar reproducción
+  - [x] Integrar con `HardwareClient` para envío de audio a reproductor
+  - [x] Actualizar flujo de WebSocket para notificar respuestas
 
-- [ ] **4.3 Estructura de Datos Escalable para Comunicación Backend Local ↔ Remoto**
-  - [ ] Diseñar protocolo multipart/form-data para comunicación flexible entre puertocho-assistant-backend y backend remoto
-  - [ ] Implementar estructura con campos obligatorios: audio binario (bytes WAV) y metadata con timestamp ISO
-  - [ ] Añadir soporte para campos opcionales: context con ubicación, temperatura, configuración de dispositivo, etc.
-  - [ ] Asegurar escalabilidad: Usar diccionarios JSON que permitan añadir keys futuras sin romper compatibilidad
-  - [ ] Mapear context opcional con DeviceContext de intentmanagerms (location→room, temperature→temperature, etc.)
-  - [ ] Integrar obtención dinámica de context desde hardware status o configuración local
-  - [ ] Actualizar remote_backend_client.py para enviar estructura completa al backend remoto
-  - [ ] Documentar estructura con ejemplos de payload en README.md
-  - [ ] Implementar validación opcional con schemas (Pydantic) para metadata y context
-  - [ ] Añadir variables de entorno para habilitar/deshabilitar envío de datos opcionales (ENABLE_CONTEXT=true)
+- [x] **4.3 Estructura de Datos Escalable para Comunicación Backend Local ↔ Remoto**
+  - [x] Diseñar protocolo multipart/form-data para comunicación flexible entre puertocho-assistant-backend y backend remoto
+  - [x] Implementar estructura con campos obligatorios: audio binario (bytes WAV) y metadata con timestamp ISO
+  - [x] Añadir soporte para campos opcionales: context con ubicación, temperatura, configuración de dispositivo, etc.
+  - [x] Asegurar escalabilidad: Usar diccionarios JSON que permitan añadir keys futuras sin romper compatibilidad
+  - [x] Mapear context opcional con DeviceContext de intentmanagerms (location→room, temperature→temperature, etc.)
+  - [x] Integrar obtención dinámica de context desde hardware status o configuración local
+  - [x] Actualizar remote_backend_client.py para enviar estructura completa al backend remoto
+  - [x] Documentar estructura con ejemplos de payload en README.md
+  - [x] Implementar validación opcional con schemas (Pydantic) para metadata y context
+  - [x] Añadir variables de entorno para habilitar/deshabilitar envío de datos opcionales (ENABLE_CONTEXT=true)
 
-- [ ] **4.4 Implementar Reproducción en Hardware**
-  - [ ] Crear endpoint `/audio/play` en `http_server.py`
-  - [ ] Añadir método `play_response_audio()` en `audio_manager.py`
-  - [ ] Implementar decodificación de audio Base64 y conversión a numpy
-  - [ ] Manejar reproducción con chunks y control de stream
-  - [ ] Añadir estado `SPEAKING` al `StateManager`
+- [x] **4.4 Implementar Reproducción en Hardware**
+  - [x] Crear endpoint `/audio/play` en `http_server.py`
+  - [x] Añadir método `play_response_audio()` en `audio_manager.py`
+  - [x] Implementar decodificación de audio Base64 y conversión a numpy
+  - [x] Manejar reproducción con chunks y control de stream
+  - [x] Añadir estado `SPEAKING` al `StateManager`
 
-- [ ] **4.5 Integrar Cliente Hardware en Backend**
-  - [ ] Añadir método `play_audio_response()` en `hardware_client.py`
-  - [ ] Implementar serialización Base64 para envío de audio
-  - [ ] Manejar metadata y contexto de respuesta
-  - [ ] Coordinar con WebSocket para notificaciones en tiempo real
+- [x] **4.5 Integrar Cliente Hardware en Backend**
+  - [x] Añadir método `play_audio_response()` en `hardware_client.py`
+  - [x] Implementar serialización Base64 para envío de audio
+  - [x] Manejar metadata y contexto de respuesta
+  - [x] Coordinar con WebSocket para notificaciones en tiempo real
 
-- [ ] **4.6 Actualizar Variables de Entorno y Configuración**
-  - [ ] Añadir variables `REMOTE_BACKEND_*` al `docker-compose.yml`
-  - [ ] Configurar credenciales: URL, usuario, password
-  - [ ] Actualizar `main.py` para inicializar cliente remoto
-  - [ ] Implementar gestión de ciclo de vida (startup/shutdown)
+- [x] **4.6 Actualizar Variables de Entorno y Configuración**
+  - [x] Añadir variables `REMOTE_BACKEND_*` al `docker-compose.yml`
+  - [x] Configurar credenciales: URL, usuario, password
+  - [x] Actualizar `main.py` para inicializar cliente remoto
+  - [x] Implementar gestión de ciclo de vida (startup/shutdown)
 
-- [ ] **4.7 Testing de Flujo Completo**
-  - [ ] Probar autenticación con Backend Remoto
-  - [ ] Validar envío de audio con metadata y context opcionales
-  - [ ] Verificar recepción y reproducción de respuestas
-  - [ ] Testing de latencia y calidad de audio
-  - [ ] Pruebas de recuperación ante errores de red
-  - [ ] Testing de escalabilidad: añadir campos nuevos sin romper compatibilidad
+- [x] **4.7 Testing de Flujo Completo**
+  - [x] Probar autenticación con Backend Remoto
+  - [x] Validar envío de audio con metadata y context opcionales
+  - [x] Verificar recepción y reproducción de respuestas
+  - [x] Testing de latencia y calidad de audio
+  - [x] Pruebas de recuperación ante errores de red
+  - [x] Testing de escalabilidad: añadir campos nuevos sin romper compatibilidad
 
 **FLUJO IMPLEMENTADO**:
 1. **Hardware** captura audio → envía a **Backend Local**
@@ -238,3 +238,88 @@
 4. **Backend Local** recibe respuesta → coordina reproducción en **Hardware**
 5. **Hardware** reproduce audio → notifica finalización
 6. **Web View** muestra estado en tiempo real durante todo el proceso
+
+---
+
+### 5. Mejoras en la vista de puertocho-assistant-web-view
+
+**OBJETIVO**: Rediseñar completamente la interfaz con una estructura de 3 secciones para una mejor experiencia de usuario.
+
+**NUEVA ARQUITECTURA DE VISTA**:
+```
+┌──────────┬───────────────────────────────────────────────────────────────────────────┐
+│          │                           COLUMNA SUPERIOR (7% alto)                      │
+│          │ Audio Wave │ Controles Audio │ Estado Asistente │ Estado Conexión Server │
+│ COLUMNA  ├───────────────────────────────────────────────────────────────────────────┤
+│ IZQDA    │                                                                           │
+│ (10%)    │                           VISTA PRINCIPAL                                 │
+│          │                           (90% ancho, 93% alto)                          │
+│ • Home   │                                                                           │
+│ • Config │  HOME: Botones 5xN (izq.) + Chat (der.)                                 │
+│ • ...    │  CONFIG: Configuración voz, volumen, modelo                              │
+│ (scroll) │  Otras vistas según icono activo                                        │
+│          │                                                                           │
+└──────────┴───────────────────────────────────────────────────────────────────────────┘
+```
+
+- [ ] **5.1 Restructurar layout principal**
+  - [ ] Crear nuevo componente `ThreeColumnLayout.svelte` para reemplazar la estructura actual
+  - [ ] Implementar CSS Grid/Flexbox con proporciones: 10% izquierda, 7% superior, resto principal
+  - [ ] Migrar contenido actual a la nueva estructura
+  - [ ] Asegurar responsividad para pantallas táctiles y móviles
+
+- [ ] **5.2 Desarrollar columna izquierda (Navegación)**
+  - [ ] Crear componente `SideNavigation.svelte` con scroll vertical
+  - [ ] Implementar iconos: Home (por defecto), Configuración, y expandibles futuros
+  - [ ] Añadir sistema de estado activo/inactivo para iconos
+  - [ ] Integrar store para manejo de vista activa (`navigationStore.ts`)
+
+- [ ] **5.3 Desarrollar columna superior (Info en tiempo real)**
+  - [ ] Crear componente `TopStatusBar.svelte` con 4 secciones:
+    - [ ] **AudioWave**: Visualizador de onda de audio en tiempo real
+    - [ ] **AudioControls**: Botones detener/pausar/iniciar grabación
+    - [ ] **AssistantStatus**: Estado actual del asistente (idle/listening/processing)
+    - [ ] **ConnectionStatus**: Estado conexión backend/hardware con indicadores visuales
+  - [ ] Integrar con stores existentes: `assistantStore`, `audioStore`
+  - [ ] Añadir animaciones y transiciones suaves
+
+- [ ] **5.4 Implementar Vista Principal - Home**
+  - [ ] Crear componente `HomeView.svelte` con layout 50/50:
+    - [ ] **Izquierda**: Componente `ButtonMatrix.svelte` - Matriz de botones 5xN configurable
+    - [ ] **Derecha**: Componente `ChatInterface.svelte` - Chat en tiempo real
+  - [ ] Implementar sistema de botones personalizables (comandos rápidos)
+  - [ ] Integrar chat con historial de comandos y respuestas
+  - [ ] Añadir configuración de dimensiones de matriz (5xN ajustable)
+
+- [ ] **5.5 Implementar Vista Principal - Configuración**
+  - [ ] Crear componente `ConfigView.svelte` con secciones:
+    - [ ] **Configuración de Voz**: Velocidad, tono, idioma
+    - [ ] **Volumen de Audio**: Controles entrada/salida, niveles
+    - [ ] **Modelo del Asistente**: Selección y parámetros IA
+    - [ ] **Preferencias UI**: Tema, tamaños, animaciones
+  - [ ] Implementar store `configStore.ts` para persistir configuraciones
+  - [ ] Añadir validación y guardado automático de cambios
+
+- [ ] **5.6 Sistema de enrutamiento interno**
+  - [ ] Crear `viewRouter.ts` para manejar cambios entre vistas principales
+  - [ ] Implementar transiciones suaves entre vistas
+  - [ ] Añadir historial de navegación y botón "atrás"
+  - [ ] Integrar con el store de navegación
+
+- [ ] **5.7 Optimización para pantallas táctiles**
+  - [ ] Aumentar área táctil de todos los elementos interactivos (mínimo 44px)
+  - [ ] Implementar feedback visual inmediato en toques
+  - [ ] Añadir soporte para gestos: swipe para cambiar vistas, tap largo para opciones
+  - [ ] Optimizar para resoluciones comunes de Pi con pantalla táctil
+
+- [ ] **5.8 Estados y stores actualizados**
+  - [ ] Crear `navigationStore.ts`: Vista activa, historial, configuración navigation
+  - [ ] Extender `configStore.ts`: Todas las configuraciones de usuario
+  - [ ] Actualizar `assistantStore.ts`: Integrar con nueva estructura
+  - [ ] Añadir `uiStore.ts`: Estados de UI, animaciones, preferencias visuales
+
+- [ ] **5.9 Testing y documentación**
+  - [ ] Testing en diferentes resoluciones y dispositivos táctiles
+  - [ ] Documentar nueva estructura de componentes
+  - [ ] Crear guía de uso para la nueva interfaz
+  - [ ] Screenshots y videos demostrativos de la nueva UI
