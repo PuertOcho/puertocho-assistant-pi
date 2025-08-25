@@ -74,6 +74,7 @@
     padding: 1rem 0;
     overflow-x: hidden;
     overflow-y: auto;
+    align-items: center;
   }
   
   .nav-item {
@@ -132,6 +133,23 @@
     filter: brightness(0.8);
     transition: filter 0.2s ease;
     z-index: 500;
+  }
+  
+  /* Ajustes para modo portrait - elementos más pequeños proporcionalmente */
+  :global(.portrait-rotated) .nav-icon {
+    width: 3.5rem;
+    height: 3.5rem;
+    font-size: 1rem;
+  }
+  
+  :global(.portrait-rotated) .icon-image {
+    width: 4rem;
+    height: 4rem;
+  }
+  
+  :global(.portrait-rotated) .nav-item {
+    padding: 0.6rem 0.8rem;
+    font-size: 0.8rem;
   }
   
   .nav-item:hover .icon-image {
