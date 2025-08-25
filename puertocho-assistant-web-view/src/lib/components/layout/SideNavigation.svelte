@@ -1,24 +1,12 @@
 <script lang="ts">
-  import { activeView, navigationItems, navigationStore, sideNavVisible } from '$lib/stores/navigationStore';
+  import { activeView, navigationItems, navigationStore } from '$lib/stores/navigationStore';
   
   function handleNavigation(viewId: string) {
     navigationStore.setActiveView(viewId as any);
-    // Auto-hide on mobile after selection
-    if (window.innerWidth < 768) {
-      sideNavVisible.set(false);
-    }
   }
 </script>
 
 <nav class="side-navigation-content">
-  <!-- Header -->
-  <div class="nav-header">
-    <div class="logo">
-      <span class="logo-icon">🤖</span>
-      <span class="logo-text">PuertoCho</span>
-    </div>
-  </div>
-  
   <!-- Navigation Items -->
   <div class="nav-items">
     {#each navigationItems as item}
@@ -28,8 +16,13 @@
         on:click={() => handleNavigation(item.id)}
         title={item.description}
       >
-        <span class="nav-icon">{item.icon}</span>
-        <span class="nav-label">{item.label}</span>
+        <span class="nav-icon">
+          {#if item.icon !== '' && item.icon !== null}
+            <img src="/sideIcons/{item.icon}.png" alt={item.label} class="icon-image" />
+          {:else}
+            <span class="nav-label">{item.label}</span>
+          {/if}
+        </span>
       </button>
     {/each}
   </div>
@@ -50,13 +43,10 @@
     background: linear-gradient(180deg, #2c3e50 0%, #34495e 100%);
     color: #ecf0f1;
     position: relative;
+    overflow-x: hidden;
+    overflow-y: auto;
   }
   
-  /* Header */
-  .nav-header {
-    padding: 1.5rem 1rem;
-    border-bottom: 1px solid #445068;
-  }
   
   .logo {
     display: flex;
@@ -82,6 +72,7 @@
   .nav-items {
     flex: 1;
     padding: 1rem 0;
+    overflow-x: hidden;
     overflow-y: auto;
   }
   
@@ -89,7 +80,7 @@
     width: 100%;
     display: flex;
     align-items: center;
-    gap: 0.75rem;
+    justify-content: center;
     padding: 0.875rem 1rem;
     background: none;
     border: none;
@@ -97,7 +88,7 @@
     font-size: 0.9rem;
     cursor: pointer;
     transition: all 0.2s ease;
-    text-align: left;
+    text-align: center;
     position: relative;
   }
   
@@ -125,9 +116,30 @@
   
   .nav-icon {
     font-size: 1.2rem;
-    width: 1.5rem;
+    width: 50px;
+    height: 50px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     text-align: center;
     flex-shrink: 0;
+  }
+  
+  .icon-image {
+    width: 58px;
+    height: 58px;
+    object-fit: contain;
+    filter: brightness(0.8);
+    transition: filter 0.2s ease;
+    z-index: 500;
+  }
+  
+  .nav-item:hover .icon-image {
+    filter: brightness(1);
+  }
+  
+  .nav-item.active .icon-image {
+    filter: brightness(1.2) sepia(1) hue-rotate(180deg) saturate(1.5);
   }
   
   .nav-label {
@@ -163,29 +175,5 @@
   
   .nav-items::-webkit-scrollbar-thumb:hover {
     background: rgba(189, 195, 199, 0.5);
-  }
-  
-  /* Mobile Adjustments */
-  @media (max-width: 768px) {
-    .nav-header {
-      padding: 1rem;
-    }
-    
-    .nav-item {
-      padding: 1rem;
-      font-size: 1rem;
-    }
-    
-    .nav-icon {
-      font-size: 1.3rem;
-    }
-  }
-  
-  /* Touch-friendly sizing for kiosk mode */
-  @media (pointer: coarse) {
-    .nav-item {
-      padding: 1.125rem 1rem;
-      min-height: 48px;
-    }
   }
 </style>

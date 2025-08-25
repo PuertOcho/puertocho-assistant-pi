@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { assistantStatus, isConnected } from '$lib/stores/assistantStore';
   import { audioProcessingState } from '$lib/stores/audioStore';
-  import { sideNavVisible, navigationStore } from '$lib/stores/navigationStore';
+  import { navigationStore } from '$lib/stores/navigationStore';
   
   // Audio wave visualization (mock data for now)
   let audioWaveData = [0.2, 0.5, 0.8, 0.3, 0.6, 0.9, 0.4, 0.7, 0.2, 0.5];
@@ -16,9 +16,6 @@
     return () => clearInterval(interval);
   });
   
-  function toggleSideNav() {
-    navigationStore.toggleSideNav();
-  }
   
   function getStatusColor(status: string): string {
     switch (status) {
@@ -42,17 +39,6 @@
 </script>
 
 <div class="top-status-bar">
-  <!-- Mobile menu toggle -->
-  <button 
-    class="mobile-menu-toggle" 
-    class:visible={!$sideNavVisible}
-    on:click={toggleSideNav}
-    aria-label="Toggle navigation menu"
-  >
-    <span class="hamburger"></span>
-    <span class="hamburger"></span>
-    <span class="hamburger"></span>
-  </button>
   
   <!-- Section 1: Audio Wave Visualization -->
   <div class="status-section audio-wave-section">
@@ -132,33 +118,6 @@
     position: relative;
   }
   
-  /* Mobile menu toggle */
-  .mobile-menu-toggle {
-    display: none;
-    flex-direction: column;
-    justify-content: space-around;
-    width: 2rem;
-    height: 2rem;
-    background: transparent;
-    border: none;
-    cursor: pointer;
-    padding: 0;
-    margin-right: 1rem;
-  }
-  
-  .mobile-menu-toggle.visible {
-    display: flex;
-  }
-  
-  .hamburger {
-    width: 2rem;
-    height: 0.25rem;
-    background-color: #495057;
-    border-radius: 10px;
-    transition: all 0.3s linear;
-    position: relative;
-    transform-origin: 1px;
-  }
   
   /* Status Sections */
   .status-section {
@@ -168,7 +127,7 @@
     align-items: center;
     padding: 0.5rem;
     border-right: 1px solid #e9ecef;
-    min-width: 0; /* Allow flexbox to shrink */
+    min-width: 120px;
   }
   
   .status-section:last-child {
@@ -259,68 +218,5 @@
     font-size: 0.7rem;
     color: #6c757d;
     font-weight: 400;
-  }
-  
-  /* Responsive Design */
-  @media (max-width: 768px) {
-    .mobile-menu-toggle {
-      display: flex;
-    }
-    
-    .status-section {
-      padding: 0.25rem;
-    }
-    
-    .section-label {
-      font-size: 0.6rem;
-      margin-bottom: 0.125rem;
-    }
-    
-    .status-text {
-      font-size: 0.7rem;
-    }
-    
-    .audio-wave {
-      width: 40px;
-      height: 20px;
-    }
-    
-    .wave-bar {
-      width: 2px;
-    }
-  }
-  
-  /* Very small screens */
-  @media (max-width: 480px) {
-    .top-status-bar {
-      padding: 0 0.5rem;
-    }
-    
-    .status-section {
-      padding: 0.125rem;
-    }
-    
-    /* Hide labels on very small screens */
-    .section-label {
-      display: none;
-    }
-    
-    /* Make queue info shorter */
-    .queue-info {
-      display: none;
-    }
-  }
-  
-  /* Touch-friendly for kiosk mode */
-  @media (pointer: coarse) {
-    .mobile-menu-toggle {
-      width: 2.5rem;
-      height: 2.5rem;
-    }
-    
-    .status-dot {
-      width: 10px;
-      height: 10px;
-    }
   }
 </style>

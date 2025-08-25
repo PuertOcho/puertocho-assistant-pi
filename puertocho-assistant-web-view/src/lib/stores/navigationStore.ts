@@ -10,11 +10,11 @@ export type NavigationItem = {
 };
 
 export const navigationItems: NavigationItem[] = [
-  { id: 'home', label: 'Inicio', icon: '🏠', description: 'Panel principal' },
-  { id: 'config', label: 'Configuración', icon: '⚙️', description: 'Configuración del asistente' },
-  { id: 'history', label: 'Historial', icon: '📋', description: 'Historial de comandos' },
-  { id: 'logs', label: 'Registros', icon: '📊', description: 'Logs del sistema' },
-  { id: 'settings', label: 'Sistema', icon: '🔧', description: 'Configuración del sistema' }
+  { id: 'home', label: 'Inicio', icon: 'home_icon', description: 'Panel principal' },
+  { id: 'config', label: 'Configuración', icon: 'configuration_icon', description: 'Configuración del asistente' },
+  { id: 'history', label: 'Historial', icon: 'historial_icon', description: 'Historial de comandos' },
+  { id: 'logs', label: 'Registros', icon: 'registro_icon', description: 'Logs del sistema' },
+  { id: 'settings', label: 'Sistema', icon: 'sistema_icon', description: 'Configuración del sistema' }
 ];
 
 // Store para la vista activa
