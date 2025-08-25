@@ -1,10 +1,9 @@
 <script lang="ts">
-  import { Header, MainContent } from '$lib/components/layout';
+  import { ThreeColumnLayout } from '$lib/components/layout';
 </script>
 
 <div class="app-container">
-  <Header />
-  <MainContent />
+  <ThreeColumnLayout />
 </div>
 
 <style>

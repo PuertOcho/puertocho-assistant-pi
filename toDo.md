@@ -262,64 +262,81 @@
 └──────────┴───────────────────────────────────────────────────────────────────────────┘
 ```
 
-- [ ] **5.1 Restructurar layout principal**
-  - [ ] Crear nuevo componente `ThreeColumnLayout.svelte` para reemplazar la estructura actual
-  - [ ] Implementar CSS Grid/Flexbox con proporciones: 10% izquierda, 7% superior, resto principal
-  - [ ] Migrar contenido actual a la nueva estructura
-  - [ ] Asegurar responsividad para pantallas táctiles y móviles
+- [x] **5.1 Restructurar layout principal**
+  - [x] Crear nuevo componente `ThreeColumnLayout.svelte` para reemplazar la estructura actual
+  - [x] Implementar CSS Grid/Flexbox con proporciones: 10% izquierda, 7% superior, resto principal
+  - [x] Migrar contenido actual a la nueva estructura
+  - [x] Asegurar responsividad para pantallas táctiles y móviles
 
-- [ ] **5.2 Desarrollar columna izquierda (Navegación)**
-  - [ ] Crear componente `SideNavigation.svelte` con scroll vertical
-  - [ ] Implementar iconos: Home (por defecto), Configuración, y expandibles futuros
-  - [ ] Añadir sistema de estado activo/inactivo para iconos
-  - [ ] Integrar store para manejo de vista activa (`navigationStore.ts`)
+- [x] **5.2 Desarrollar columna izquierda (Navegación)**
+  - [x] Crear componente `SideNavigation.svelte` con scroll vertical
+  - [x] Implementar iconos: Home (por defecto), Configuración, y expandibles futuros
+  - [x] Añadir sistema de estado activo/inactivo para iconos
+  - [x] Integrar store para manejo de vista activa (`navigationStore.ts`)
 
-- [ ] **5.3 Desarrollar columna superior (Info en tiempo real)**
-  - [ ] Crear componente `TopStatusBar.svelte` con 4 secciones:
-    - [ ] **AudioWave**: Visualizador de onda de audio en tiempo real
-    - [ ] **AudioControls**: Botones detener/pausar/iniciar grabación
-    - [ ] **AssistantStatus**: Estado actual del asistente (idle/listening/processing)
-    - [ ] **ConnectionStatus**: Estado conexión backend/hardware con indicadores visuales
-  - [ ] Integrar con stores existentes: `assistantStore`, `audioStore`
-  - [ ] Añadir animaciones y transiciones suaves
+- [x] **5.3 Desarrollar columna superior (Info en tiempo real)**
+  - [x] Crear componente `TopStatusBar.svelte` con 4 secciones:
+    - [x] **AudioWave**: Visualizador de onda de audio en tiempo real
+    - [x] **AudioControls**: Botones detener/pausar/iniciar grabación
+    - [x] **AssistantStatus**: Estado actual del asistente (idle/listening/processing)
+    - [x] **ConnectionStatus**: Estado conexión backend/hardware con indicadores visuales
+  - [x] Integrar con stores existentes: `assistantStore`, `audioStore`
+  - [x] Añadir animaciones y transiciones suaves
 
-- [ ] **5.4 Implementar Vista Principal - Home**
-  - [ ] Crear componente `HomeView.svelte` con layout 50/50:
-    - [ ] **Izquierda**: Componente `ButtonMatrix.svelte` - Matriz de botones 5xN configurable
-    - [ ] **Derecha**: Componente `ChatInterface.svelte` - Chat en tiempo real
-  - [ ] Implementar sistema de botones personalizables (comandos rápidos)
-  - [ ] Integrar chat con historial de comandos y respuestas
-  - [ ] Añadir configuración de dimensiones de matriz (5xN ajustable)
+- [x] **5.4 Implementar Vista Principal - Home**
+  - [x] Crear componente `HomeView.svelte` con layout 50/50:
+    - [x] **Izquierda**: Componente `ButtonMatrix.svelte` - Matriz de botones 5xN configurable
+    - [x] **Derecha**: Componente `ChatInterface.svelte` - Chat en tiempo real
+  - [x] Implementar sistema de botones personalizables (comandos rápidos)
+  - [x] Integrar chat con historial de comandos y respuestas
+  - [x] Añadir configuración de dimensiones de matriz (5xN ajustable)
 
-- [ ] **5.5 Implementar Vista Principal - Configuración**
-  - [ ] Crear componente `ConfigView.svelte` con secciones:
-    - [ ] **Configuración de Voz**: Velocidad, tono, idioma
-    - [ ] **Volumen de Audio**: Controles entrada/salida, niveles
-    - [ ] **Modelo del Asistente**: Selección y parámetros IA
-    - [ ] **Preferencias UI**: Tema, tamaños, animaciones
-  - [ ] Implementar store `configStore.ts` para persistir configuraciones
-  - [ ] Añadir validación y guardado automático de cambios
+- [x] **5.5 Implementar Vista Principal - Configuración**
+  - [x] Crear componente `ConfigView.svelte` con secciones:
+    - [x] **Configuración de Voz**: Velocidad, tono, idioma
+    - [x] **Volumen de Audio**: Controles entrada/salida, niveles
+    - [x] **Modelo del Asistente**: Selección y parámetros IA
+    - [x] **Preferencias UI**: Tema, tamaños, animaciones
+  - [x] Implementar store `configStore.ts` para persistir configuraciones
+  - [x] Añadir validación y guardado automático de cambios
 
-- [ ] **5.6 Sistema de enrutamiento interno**
-  - [ ] Crear `viewRouter.ts` para manejar cambios entre vistas principales
-  - [ ] Implementar transiciones suaves entre vistas
-  - [ ] Añadir historial de navegación y botón "atrás"
-  - [ ] Integrar con el store de navegación
+- [x] **5.6 Sistema de enrutamiento interno**
+  - [x] Crear `viewRouter.ts` para manejar cambios entre vistas principales
+  - [x] Implementar transiciones suaves entre vistas
+  - [x] Añadir historial de navegación y botón "atrás"
+  - [x] Integrar con el store de navegación
 
-- [ ] **5.7 Optimización para pantallas táctiles**
-  - [ ] Aumentar área táctil de todos los elementos interactivos (mínimo 44px)
-  - [ ] Implementar feedback visual inmediato en toques
-  - [ ] Añadir soporte para gestos: swipe para cambiar vistas, tap largo para opciones
-  - [ ] Optimizar para resoluciones comunes de Pi con pantalla táctil
+- [x] **5.7 Optimización para pantallas táctiles**
+  - [x] Aumentar área táctil de todos los elementos interactivos (mínimo 44px)
+  - [x] Implementar feedback visual inmediato en toques
+  - [x] Añadir soporte para gestos: swipe para cambiar vistas, tap largo para opciones
+  - [x] Optimizar para resoluciones comunes de Pi con pantalla táctil
 
-- [ ] **5.8 Estados y stores actualizados**
-  - [ ] Crear `navigationStore.ts`: Vista activa, historial, configuración navigation
-  - [ ] Extender `configStore.ts`: Todas las configuraciones de usuario
-  - [ ] Actualizar `assistantStore.ts`: Integrar con nueva estructura
-  - [ ] Añadir `uiStore.ts`: Estados de UI, animaciones, preferencias visuales
+- [x] **5.8 Estados y stores actualizados**
+  - [x] Crear `navigationStore.ts`: Vista activa, historial, configuración navigation
+  - [x] Extender `configStore.ts`: Todas las configuraciones de usuario
+  - [x] Actualizar `assistantStore.ts`: Integrar con nueva estructura
+  - [x] Añadir `uiStore.ts`: Estados de UI, animaciones, preferencias visuales
 
 - [ ] **5.9 Testing y documentación**
   - [ ] Testing en diferentes resoluciones y dispositivos táctiles
   - [ ] Documentar nueva estructura de componentes
   - [ ] Crear guía de uso para la nueva interfaz
   - [ ] Screenshots y videos demostrativos de la nueva UI
+
+**✅ IMPLEMENTADO - PUNTO 5:**
+- ✅ **Nueva Arquitectura de 3 Columnas**: Implementación completa con layout responsive y navegación fluida
+- ✅ **ThreeColumnLayout.svelte**: Componente principal con gestión automática de visibilidad y responsividad
+- ✅ **SideNavigation.svelte**: Navegación lateral con iconos, estados activos y soporte móvil
+- ✅ **TopStatusBar.svelte**: Barra superior con 4 secciones: AudioWave, Controles, Estado Asistente, Conexión
+- ✅ **Vistas Implementadas**: Home, Config, History, Logs, Settings con funcionalidad completa
+- ✅ **HomeView**: Layout 50/50 con matriz de botones 5xN configurable y interfaz de chat
+- ✅ **ConfigView**: Configuración completa de voz, sistema e interfaz con tabs navegables  
+- ✅ **HistoryView**: Historial filtrable con búsqueda y exportación de datos
+- ✅ **LogsView**: Visualización de logs en tiempo real con filtros por nivel
+- ✅ **SettingsView**: Panel de administración del sistema con monitoreo de recursos
+- ✅ **NavigationStore**: Store completo para manejo de vistas activas y navegación
+- ✅ **Optimización Táctil**: Elementos con tamaño mínimo 44px, feedback visual y gestos
+- ✅ **Responsividad**: Adaptación automática a móvil, tablet y kiosko con breakpoints específicos
+- ✅ **Integración Stores**: Conexión completa con assistantStore y audioStore existentes
+- ✅ **Transiciones**: Animaciones suaves y transiciones visuales en toda la interfaz
