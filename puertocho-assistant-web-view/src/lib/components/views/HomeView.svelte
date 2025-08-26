@@ -103,15 +103,17 @@
     height: 100%;
     padding: 1rem;
     background-color: #f8f9fa;
+    box-sizing: border-box;
   }
   
   .home-content {
     height: 100%;
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 50% 50%;
     gap: 2rem;
     max-width: 1400px;
     margin: 0 auto;
+    box-sizing: border-box;
   }
   
   .left-section,
@@ -122,6 +124,8 @@
     border-radius: 12px;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     overflow: hidden;
+    width: 100%;
+    box-sizing: border-box;
   }
   
   .section-header {
@@ -213,7 +217,7 @@
   /* Responsive Design */
   @media (max-width: 1024px) {
     .home-content {
-      grid-template-columns: 1fr;
+      grid-template-columns: 50% 50%;
       gap: 1rem;
     }
     
@@ -241,6 +245,11 @@
   @media (max-width: 768px) {
     .home-view {
       padding: 0.5rem;
+    }
+    
+    .home-content {
+      grid-template-columns: 1fr;
+      gap: 0.5rem;
     }
     
     .button-matrix {

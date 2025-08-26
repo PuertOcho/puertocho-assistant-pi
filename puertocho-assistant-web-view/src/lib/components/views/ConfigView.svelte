@@ -96,11 +96,7 @@
 </script>
 
 <div class="config-view">
-  <div class="config-header">
-    <h1>Configuración del Asistente</h1>
-    <p>Personaliza PuertoCho según tus preferencias</p>
-  </div>
-  
+ 
   <div class="config-content">
     <!-- Tab Navigation -->
     <div class="tab-navigation">
@@ -324,10 +320,9 @@
   
   .config-content {
     flex: 1;
-    padding: 2rem;
     max-width: 800px;
-    margin: 0 auto;
     width: 100%;
+    padding: 1rem 3rem;
   }
   
   /* Tab Navigation */
@@ -492,39 +487,7 @@
     transform: translateY(-2px);
     box-shadow: 0 4px 8px rgba(108, 117, 125, 0.3);
   }
-  
-  /* Responsive Design */
-  @media (max-width: 768px) {
-    .config-content {
-      padding: 1rem;
-    }
-    
-    .config-header {
-      padding: 1.5rem 1rem;
-    }
-    
-    .config-header h1 {
-      font-size: 1.5rem;
-    }
-    
-    .tab-content {
-      padding: 1.5rem;
-    }
-    
-    .tab-button {
-      padding: 0.75rem 1rem;
-      font-size: 0.9rem;
-    }
-    
-    .config-actions {
-      flex-direction: column;
-    }
-    
-    .btn {
-      width: 100%;
-      justify-content: center;
-    }
-  }
+
   
   /* Touch-friendly for kiosk mode */
   @media (pointer: coarse) {

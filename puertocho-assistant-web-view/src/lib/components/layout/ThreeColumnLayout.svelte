@@ -93,7 +93,7 @@
     width: 100%;
     height: 85vh;
     overflow-y: auto;
-    padding: 1rem;
+    
     flex: 1;
   }
   
