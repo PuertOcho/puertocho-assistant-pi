@@ -1,0 +1,40 @@
+{
+  "matrixConfig": {
+    "rows": 5,
+    "cols": 3
+  },
+  "buttonActions": [
+    {
+      "id": 1,
+      "label": "Casa",
+      "icon": "home_icon.png",
+      "iconType": "image",
+      "action": "home_mcp",
+      "category": "home"
+    },
+    {
+      "id": 2,
+      "label": "Buscador",
+      "icon": "browser_icon.png",
+      "iconType": "image",
+      "action": "browser_mcp",
+      "category": "buscador"
+    },
+    {
+      "id": 3,
+      "label": "Mapas",
+      "icon": "google_maps_icon.png",
+      "iconType": "image",
+      "action": "google_maps_mcp",
+      "category": "navigation"
+    },
+    {
+      "id": 4,
+      "label": "Docker",
+      "icon": "docker_icon.png",
+      "iconType": "image",
+      "action": "docker_mcp",
+      "category": "system"
+    }
+  ]
+}
