@@ -93,11 +93,6 @@
 </script>
 
 <div class="settings-view">
-  <div class="settings-header">
-    <h1>Configuración del Sistema</h1>
-    <p>Administración y monitoreo del sistema</p>
-  </div>
-  
   <div class="settings-content">
     <!-- Tab Navigation -->
     <div class="tab-navigation">

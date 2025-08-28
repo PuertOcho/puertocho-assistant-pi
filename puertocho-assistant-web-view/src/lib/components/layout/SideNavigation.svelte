@@ -47,27 +47,6 @@
     overflow-y: auto;
   }
   
-  
-  .logo {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-  }
-  
-  .logo-icon {
-    font-size: 1.5rem;
-    background: linear-gradient(45deg, #3498db, #e74c3c);
-    background-clip: text;
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-  }
-  
-  .logo-text {
-    font-size: 1.1rem;
-    font-weight: 600;
-    color: #ecf0f1;
-  }
-  
   /* Navigation Items */
   .nav-items {
     flex: 1;

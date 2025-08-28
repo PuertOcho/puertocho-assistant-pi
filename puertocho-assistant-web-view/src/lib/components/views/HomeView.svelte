@@ -9,7 +9,7 @@
     stopConfigPolling
   } from '$lib/stores/buttonConfigStore';
   import { AudioControls } from '../audio';
-  import { CommandHistory } from '../assistant';
+  import ChatInterface from '../chat/ChatInterface.svelte';
   import ButtonIcon from '../ui/ButtonIcon.svelte';
   
   // Start configuration polling when component mounts
@@ -84,20 +84,10 @@
     </div>
     
     <!-- Right Side: Chat/Audio Interface (50% width) -->
-    <div class="right-section">
-      <div class="section-header">
-        <h2>Interfaz de Voz</h2>
-        <p>Audio y comunicación</p>
-      </div>
-      
-      <!-- Audio Controls -->
-      <div class="audio-section">
-        <AudioControls />
-      </div>
-      
-      <!-- Command History -->
+    <div class="right-section">    
+      <!-- Chat Interface -->
       <div class="chat-section">
-        <CommandHistory commands={$commandHistory} />
+        <ChatInterface maxHeight="100%" />
       </div>
     </div>
   </div>
@@ -129,25 +119,6 @@
     overflow: hidden;
     width: 100%;
     box-sizing: border-box;
-  }
-  
-  .section-header {
-    padding: 1.5rem;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    text-align: center;
-  }
-  
-  .section-header h2 {
-    margin: 0 0 0.5rem 0;
-    font-size: 1.5rem;
-    font-weight: 600;
-  }
-  
-  .section-header p {
-    margin: 0;
-    font-size: 0.9rem;
-    opacity: 0.9;
   }
   
   /* Button Matrix */
@@ -238,14 +209,8 @@
   }
   
   /* Right Section */
-  .audio-section {
-    padding: 1.5rem;
-    border-bottom: 1px solid #dee2e6;
-  }
-  
   .chat-section {
     flex: 1;
-    padding: 1.5rem;
     overflow-y: auto;
   }
   
@@ -282,14 +247,6 @@
     .button-label {
       font-size: 0.7rem;
       line-height: 1;
-    }
-    
-    .section-header {
-      padding: 1rem 1.5rem;
-    }
-    
-    .section-header h2 {
-      font-size: 1.2rem;
     }
   }
 </style>

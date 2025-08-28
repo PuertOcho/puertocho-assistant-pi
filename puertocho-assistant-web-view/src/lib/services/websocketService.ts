@@ -1,5 +1,6 @@
 import { browser } from '$app/environment';
 import { assistantStatus, commandHistory, isConnected, audioProcessingState, audioHistory } from '$lib/stores/assistantStore';
+import { addUserMessage, addAssistantMessage, updateMessageTranscription } from '$lib/stores/chatStore';
 
 let socket: WebSocket | null = null;
 
@@ -71,19 +72,32 @@ export function connect() {
       
       // Add to history if completed
       if (payload.status === 'completed' && payload.current_audio) {
-        audioHistory.update(history => [
-          {
-            id: payload.current_audio.id || Date.now().toString(),
-            filename: payload.current_audio.filename || 'unknown',
-            timestamp: payload.current_audio.timestamp || new Date().toISOString(),
-            duration: payload.current_audio.duration || 0,
-            size: payload.current_audio.size || 0,
-            status: 'completed' as const,
-            quality_score: payload.current_audio.quality_score,
-            url: payload.current_audio.url
-          },
-          ...history
-        ].slice(0, 50)); // Keep last 50 items
+        const audioItem = {
+          id: payload.current_audio.id || Date.now().toString(),
+          filename: payload.current_audio.filename || 'unknown',
+          timestamp: payload.current_audio.timestamp || new Date().toISOString(),
+          duration: payload.current_audio.duration || 0,
+          size: payload.current_audio.size || 0,
+          status: 'completed' as const,
+          quality_score: payload.current_audio.quality_score,
+          url: payload.current_audio.url
+        };
+        
+        audioHistory.update(history => [audioItem, ...history].slice(0, 50)); // Keep last 50 items
+        
+        // Add to chat if it has URL (verification file)
+        if (payload.current_audio.url) {
+          addUserMessage(
+            payload.current_audio.url,
+            payload.current_audio.filename,
+            payload.current_audio.transcription || payload.transcription
+          );
+        }
+      }
+      
+      // Handle transcription updates
+      if (payload.transcription && payload.current_audio?.id) {
+        updateMessageTranscription(`user_${payload.current_audio.id}`, payload.transcription);
       }
     }
 
@@ -114,6 +128,19 @@ export function connect() {
         command: data.payload.command,
       };
       commandHistory.update(history => [...history, newCommand]);
+    }
+
+    // Assistant response events
+    if (data.type === 'assistant_response') {
+      const payload = data.payload;
+      
+      if (payload.text && payload.audio_url) {
+        // Complete response with both text and audio
+        addAssistantMessage(payload.text, payload.audio_url, payload.audio_filename);
+      } else if (payload.text) {
+        // Text-only response
+        addAssistantMessage(payload.text);
+      }
     }
 
     // Connection info
