@@ -36,14 +36,7 @@
   }
 </script>
 
-<div class="chat-interface">
-  <div class="chat-header">
-    <h3>Conversación</h3>
-    <div class="message-count">
-      {messages.length} mensaje{messages.length !== 1 ? 's' : ''}
-    </div>
-  </div>
-  
+<div class="chat-interface">  
   <div 
     class="chat-messages" 
     bind:this={chatContainer}
@@ -159,6 +152,20 @@
   .message-count {
     font-size: 0.85rem;
     opacity: 0.9;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  
+  .loading-indicator {
+    color: #ffc107;
+    font-size: 0.8rem;
+    animation: pulse 1.5s infinite;
+  }
+  
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
   }
   
   .chat-messages {

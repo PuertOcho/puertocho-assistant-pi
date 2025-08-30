@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { assistantStatus, commandHistory } from '$lib/stores/assistantStore';
+  import { chatStore, addUserMessage, addAssistantMessage } from '$lib/stores/chatStore';
   import { 
     buttonActions, 
     matrixConfig, 
@@ -33,6 +34,23 @@
         command: `Manual: ${label}`
       }
     ]);
+  }
+  
+  // Test function to simulate adding messages to chat
+  function testAddMessage() {
+    // Simulate user message with audio
+    addUserMessage(
+      "http://localhost:8000/api/v1/audio/verification/files/verification_20250828_094102_338_captured_voice_20250827_193516_595.wav",
+      "test.wav",
+      "Hola asistente, ¿puedes ayudarme?"
+    );
+    
+    // Simulate assistant response after a delay
+    setTimeout(() => {
+      addAssistantMessage(
+        "¡Hola! Por supuesto que puedo ayudarte. ¿En qué necesitas asistencia?"
+      );
+    }, 1000);
   }
   
   // Calculate how many buttons to show based on matrix configuration
@@ -84,10 +102,54 @@
     </div>
     
     <!-- Right Side: Chat/Audio Interface (50% width) -->
-    <div class="right-section">    
+    <div class="right-section">
+      <!-- Debug info (solo en desarrollo) -->
+      {#if import.meta.env.DEV}
+        <div class="debug-info">
+          <small>
+            Mensajes: {$chatStore.messages?.length || 0} | 
+            Estado: {$assistantStatus} | 
+            Cargando: {$chatStore.isLoading ? 'Sí' : 'No'}
+          </small>
+        </div>
+      {/if}
+      
       <!-- Chat Interface -->
       <div class="chat-section">
-        <ChatInterface maxHeight="100%" />
+        <!-- Verificar si hay mensajes y mostrar estado alternativo -->
+        {#if $chatStore.messages && $chatStore.messages.length > 0}
+          <ChatInterface maxHeight="100%" />
+        {:else}
+          <div class="no-messages-state">
+            <p>Puedes empezar una conversación enviando un comando de voz.</p>
+            <div class="status-indicators">
+              <div class="status-item">
+                <span class="status-label">Estado:</span>
+                <span class="status-value {$assistantStatus}">{$assistantStatus}</span>
+              </div>
+              {#if $chatStore.isLoading}
+                <div class="status-item">
+                  <span class="status-label">Procesando audio...</span>
+                  <div class="loading-spinner"></div>
+                </div>
+              {/if}
+            </div>
+            <div class="quick-actions">
+              <button class="quick-action-btn" on:click={() => handleButtonClick('help', 'Ayuda')}>
+                ❓ Obtener ayuda
+              </button>
+              <button class="quick-action-btn" on:click={() => handleButtonClick('status', 'Estado del sistema')}>
+                📊 Ver estado del sistema
+              </button>
+              <!-- Test button (solo en desarrollo) -->
+              {#if import.meta.env.DEV}
+                <button class="quick-action-btn test-btn" on:click={testAddMessage}>
+                  🧪 Probar mensaje de chat
+                </button>
+              {/if}
+            </div>
+          </div>
+        {/if}
       </div>
     </div>
   </div>
@@ -212,6 +274,146 @@
   .chat-section {
     flex: 1;
     overflow-y: auto;
+  }
+  
+  /* Debug info */
+  .debug-info {
+    background: #fff3cd;
+    border: 1px solid #ffeaa7;
+    padding: 0.5rem;
+    font-size: 0.75rem;
+    color: #856404;
+    text-align: center;
+  }
+  
+  /* No messages state */
+  .no-messages-state {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    text-align: center;
+    color: #6c757d;
+  }
+  
+  .empty-chat-icon {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    opacity: 0.5;
+  }
+  
+  .no-messages-state h3 {
+    margin: 0 0 1rem 0;
+    color: #495057;
+    font-weight: 600;
+  }
+  
+  .no-messages-state p {
+    margin: 0 0 2rem 0;
+    line-height: 1.5;
+    max-width: 300px;
+  }
+  
+  .status-indicators {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-bottom: 2rem;
+    padding: 1rem;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border: 1px solid #dee2e6;
+  }
+  
+  .status-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+  }
+  
+  .status-label {
+    font-weight: 600;
+    color: #495057;
+  }
+  
+  .status-value {
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    font-weight: 500;
+  }
+  
+  .status-value.idle {
+    background: #d1ecf1;
+    color: #0c5460;
+  }
+  
+  .status-value.listening {
+    background: #d4edda;
+    color: #155724;
+  }
+  
+  .status-value.processing {
+    background: #fff3cd;
+    color: #856404;
+  }
+  
+  .status-value.error {
+    background: #f8d7da;
+    color: #721c24;
+  }
+  
+  .loading-spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid #dee2e6;
+    border-top: 2px solid #6c757d;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+  
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+  
+  .quick-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    width: 100%;
+    max-width: 250px;
+  }
+  
+  .quick-action-btn {
+    padding: 0.75rem 1rem;
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 0.9rem;
+    color: #495057;
+  }
+  
+  .quick-action-btn:hover {
+    background: #e9ecef;
+    border-color: #adb5bd;
+    transform: translateY(-1px);
+  }
+  
+  .test-btn {
+    background: #e3f2fd !important;
+    border-color: #2196f3 !important;
+    color: #1976d2 !important;
+  }
+  
+  .test-btn:hover {
+    background: #bbdefb !important;
+    border-color: #1976d2 !important;
   }
   
   /* Touch-friendly for kiosk mode */

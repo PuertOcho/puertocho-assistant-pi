@@ -300,7 +300,6 @@
     align-items: flex-end;
     gap: 2px;
     height: 24px;
-    width: 60px;
   }
   
   .wave-bar {
